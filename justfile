@@ -32,9 +32,9 @@ release version:
     [[ "$(git branch --show-current)" == "main" ]] || { echo "not on main"; exit 1; }
     [[ -z "$(git status --porcelain)" ]] || { echo "working tree not clean"; exit 1; }
     git pull --ff-only
+    just check
     cargo set-version --workspace {{version}}
     cargo check -q
-    just check
     git diff --quiet || git commit -am "chore: release v{{version}}"
     git tag "v{{version}}"
     git push
