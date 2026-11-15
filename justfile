@@ -40,3 +40,23 @@ release version:
     git push
     git push origin "v{{version}}"
     echo "Released v{{version}}: follow it with: gh run watch"
+
+# Start a feature branch from fresh main: just start feat/bluetooth-card
+start branch:
+    git switch main
+    git pull --ff-only
+    git switch -c "{{branch}}"
+
+# Run checks, push the branch and open a PR
+pr:
+    just check
+    git push -u origin HEAD
+    gh pr create --fill
+
+# Wait for CI, squash-merge the PR, back to updated main
+merge:
+    gh pr checks --watch --fail-fast
+    gh pr merge --squash --delete-branch
+    git switch main
+    git pull --ff-only
+    git fetch --prune
