@@ -1,0 +1,12 @@
+[workspace]
+resolver    = "3"
+members     = ["crates/*"]
+
+[workspace.package]
+version     = "0.0.1"
+edition     = "2024"
+license     = "MIT OR Apache-2.0"
+authors     = ["Constantin Theis <cons@ths.lu>"]
+repository  = "https://github.com/the-cons/pultr"
+readme      = "README.md"
+

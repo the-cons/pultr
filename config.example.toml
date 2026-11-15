@@ -1,0 +1,41 @@
+# Copy to ~/.config/pultr/config.toml and adjust.
+# Find device addresses with: pultr init  (or `blueutil --paired` on macOS)
+
+[ui]
+theme   = "default"
+columns = 3
+border  = "rounded"
+
+[[card]]
+id     = "headphones"
+type   = "bluetooth"
+title  = "Headphones"
+device = "<bluetooth-address>"
+keys   = { toggle = "a" }
+
+[[card]]
+id     = "ipad"
+type   = "sidecar"          # macOS only
+device = "<ipad-name>"
+keys   = { toggle = "i" }
+
+[[card]]
+id   = "battery"
+type = "battery"
+
+[[card]]
+id   = "music"
+type = "media"
+span = [2, 1]
+keys = { play_pause = "space", next = "n", prev = "p" }
+
+[[card]]
+id   = "out"
+type = "audio-output"
+keys = { cycle = "o" }
+
+[[scene]]
+id    = "desk"
+title = "Desk mode"
+key   = "D"
+steps = ["ipad.connect", "headphones.connect", "music.play"]

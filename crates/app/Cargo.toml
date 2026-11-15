@@ -1,0 +1,15 @@
+[package]
+name        = "pultr"
+description = "Card-based terminal dashboard for your machine's settings and status"
+keywords    = ["tui", "dashboard", "bluetooth", "macos", "linux"]
+categories  = ["command-line-utilities"]
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+readme.workspace     = true
+
+[[bin]]
+name = "pultr"
+path = "src/main.rs"
