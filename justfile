@@ -49,6 +49,7 @@ start branch:
 
 # Run checks, push the branch and open a PR
 pr:
+    @git diff --quiet && git diff --cached --quiet || { echo "uncommitted changes: commit first"; exit 1; }
     just check
     git push -u origin HEAD
     gh pr create --fill
