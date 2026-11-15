@@ -35,7 +35,7 @@ release version:
     cargo set-version --workspace {{version}}
     cargo check -q
     just check
-    git commit -am "chore: release v{{version}}"
+    git diff --quiet || git commit -am "chore: release v{{version}}"
     git tag "v{{version}}"
     git push
     git push origin "v{{version}}"
