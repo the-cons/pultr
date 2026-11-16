@@ -13,3 +13,6 @@ crossterm.workspace = true
 futures.workspace   = true
 ratatui.workspace   = true
 tokio.workspace     = true
+
+[dev-dependencies]
+insta.workspace     = true
