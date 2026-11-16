@@ -21,10 +21,7 @@ impl EventSource {
     pub fn new(tick_rate: Duration) -> Self {
         let mut tick = interval(tick_rate);
         tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        Self {
-            terminal: EventStream::new(),
-            tick,
-        }
+        Self { terminal: EventStream::new(), tick }
     }
 }
 
@@ -71,10 +68,7 @@ mod tests {
 
     #[test]
     fn key_press_passes_through() {
-        assert!(matches!(
-            translate(key(KeyEventKind::Press)),
-            Some(Event::Key(_))
-        ));
+        assert!(matches!(translate(key(KeyEventKind::Press)), Some(Event::Key(_))));
     }
 
     #[test]
@@ -85,10 +79,7 @@ mod tests {
 
     #[test]
     fn resize_passes_through() {
-        assert!(matches!(
-            translate(TermEvent::Resize(80, 24)),
-            Some(Event::Resize)
-        ));
+        assert!(matches!(translate(TermEvent::Resize(80, 24)), Some(Event::Resize)));
     }
 
     #[test]
