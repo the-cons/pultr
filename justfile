@@ -21,10 +21,6 @@ check:
 test:
     cargo test --workspace
 
-# Review changed insta snapshots (once tests use insta)
-snap:
-    cargo insta review
-
 # Release a new version: just release 0.1.0
 release version:
     #!/usr/bin/env bash
