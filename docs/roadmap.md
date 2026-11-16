@@ -4,17 +4,17 @@ Small steps. Each milestone ends with something you can run. Tick boxes as you g
 
 ## M0 — Skeleton (an evening or two)
 
-- [ ] Reserve the name: publish an empty `pultr` crate on crates.io, create the GitHub repo
-- [ ] Create repo, licence (MIT OR Apache-2.0), `.gitignore`, README
+- [x] Reserve the name: publish an empty `pultr` crate on crates.io, create the GitHub repo
+- [x] Create repo, licence (MIT OR Apache-2.0), `.gitignore`, README
 - [ ] Cargo workspace with empty crates: `platform`, `core`, `cards`, `mock`, `macos`, `app`
-- [ ] GitHub Actions: build + clippy + test on `macos-latest` and `ubuntu-latest`
-- [ ] `pultr --version` runs
+- [x] GitHub Actions: build + clippy + test on `macos-latest` and `ubuntu-latest`
+- [x] `pultr --version` runs
 
 **Done when:** CI is green.
 
 ## M1 — A box on screen
 
-- [ ] ratatui + crossterm app loop, quit with `q`
+- [x] ratatui + crossterm app loop, quit with `q`
 - [ ] Fixed grid layout with hard-coded placeholder cards
 - [ ] Focus movement with arrows / `hjkl`, highlighted border
 

@@ -1,0 +1,9 @@
+---
+source: crates/core/src/ui.rs
+expression: "draw(40, 5).backend()"
+---
+"┌ pultr ───────────────────────────────┐"
+"│            press q to quit           │"
+"│                                      │"
+"│                                      │"
+"└──────────────────────────────────────┘"

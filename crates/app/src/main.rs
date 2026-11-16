@@ -1,12 +1,8 @@
-fn main() {
-    match std::env::args().nth(1).as_deref() {
-        Some("--version" | "-V") => println!("pultr {}", env!("CARGO_PKG_VERSION")),
-        _ => {
-            println!(
-                "pultr {} - pre-alpha, nothing to see yet.",
-                env!("CARGO_PKG_VERSION")
-            );
-            println!("Follow along: https://github.com/the-cons/pultr")
-        }
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    if let Some("--version" | "-V") = std::env::args().nth(1).as_deref() {
+        println!("pultr {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
     }
+    pultr_core::run().await
 }

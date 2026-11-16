@@ -13,3 +13,8 @@ readme.workspace     = true
 [[bin]]
 name = "pultr"
 path = "src/main.rs"
+
+[dependencies]
+pultr-core.workspace = true
+anyhow.workspace     = true
+tokio.workspace      = true

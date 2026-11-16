@@ -15,15 +15,11 @@ check:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets -- -D warnings
     cargo test --workspace
-    cargo package -p pultr --locked
+    cargo package --workspace --locked
 
 # Run tests only
 test:
     cargo test --workspace
-
-# Review changed insta snapshots (once tests use insta)
-snap:
-    cargo insta review
 
 # Release a new version: just release 0.1.0
 release version:
@@ -61,3 +57,7 @@ merge:
     git switch main
     git pull --ff-only
     git fetch --prune
+
+# Run tests, then review any changed snapshots
+snap:
+    cargo insta test --workspace --review
