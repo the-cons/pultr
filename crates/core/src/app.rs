@@ -6,8 +6,12 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self { Self { running: true } }
-    pub fn is_running(&self) -> bool { self.running }
+    pub fn new() -> Self {
+        Self { running: true }
+    }
+    pub fn is_running(&self) -> bool {
+        self.running
+    }
 
     pub fn update(&mut self, action: Action) {
         match action {

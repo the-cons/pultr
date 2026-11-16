@@ -4,9 +4,12 @@ mod event;
 mod keymap;
 mod ui;
 
-use std::time::Duration;
+use crate::{
+    app::App,
+    event::{Event, EventSource, Events},
+};
 use ratatui::{Terminal, backend::Backend};
-use crate::{app::App, event::{Event, EventSource, Events}};
+use std::time::Duration;
 
 /// Entry point: set up the terminal, run the loop, always restore.
 pub async fn run() -> anyhow::Result<()> {

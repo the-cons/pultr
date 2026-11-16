@@ -1,7 +1,7 @@
+use crate::app::App;
 use ratatui::Frame;
 use ratatui::layout::Alignment;
 use ratatui::widgets::{Block, Paragraph};
-use crate::app::App;
 
 /// Pure view: reads `App`, draws a frame. Never mutates state.
 pub fn render(_app: &App, frame: &mut Frame) {

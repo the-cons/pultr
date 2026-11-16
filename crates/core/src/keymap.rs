@@ -1,5 +1,5 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::action::Action;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Key -> Action. Hard-coded for now.
 pub fn map(key: KeyEvent) -> Option<Action> {
@@ -12,8 +12,8 @@ pub fn map(key: KeyEvent) -> Option<Action> {
 
 #[cfg(test)]
 mod tests {
-    use crossterm::event::KeyEventKind;
     use super::*;
+    use crossterm::event::KeyEventKind;
 
     fn key(code: KeyCode, mods: KeyModifiers) -> KeyEvent {
         KeyEvent::new(code, mods)

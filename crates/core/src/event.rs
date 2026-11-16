@@ -26,7 +26,6 @@ impl EventSource {
             tick,
         }
     }
-
 }
 
 impl Events for EventSource {
@@ -72,7 +71,10 @@ mod tests {
 
     #[test]
     fn key_press_passes_through() {
-        assert!(matches!(translate(key(KeyEventKind::Press)), Some(Event::Key(_))));
+        assert!(matches!(
+            translate(key(KeyEventKind::Press)),
+            Some(Event::Key(_))
+        ));
     }
 
     #[test]
@@ -83,7 +85,10 @@ mod tests {
 
     #[test]
     fn resize_passes_through() {
-        assert!(matches!(translate(TermEvent::Resize(80, 24)), Some(Event::Resize)));
+        assert!(matches!(
+            translate(TermEvent::Resize(80, 24)),
+            Some(Event::Resize)
+        ));
     }
 
     #[test]
