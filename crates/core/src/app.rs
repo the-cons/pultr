@@ -19,3 +19,20 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn starts_running() {
+        assert!(App::new().is_running());
+    }
+
+    #[test]
+    fn quit_stops_the_app() {
+        let mut app = App::new();
+        app.update(Action::Quit);
+        assert!(!app.is_running());
+    }
+}
