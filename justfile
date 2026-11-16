@@ -61,3 +61,7 @@ merge:
     git switch main
     git pull --ff-only
     git fetch --prune
+
+# Run tests, then review any changed snapshots
+snap:
+    cargo insta test --workspace --review
