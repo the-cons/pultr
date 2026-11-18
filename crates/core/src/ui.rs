@@ -1,10 +1,9 @@
-use crate::app::App;
+use crate::app::{App, COLUMNS};
 use ratatui::Frame;
 use ratatui::layout::{Layout, Rect};
 use ratatui::prelude::Constraint;
-use ratatui::widgets::Block;
-
-const COLUMNS: usize = 3;
+use ratatui::style::{Color, Style};
+use ratatui::widgets::{Block, BorderType};
 
 /// Pure view: reads `App`, draws a frame. Never mutates state.
 pub fn render(app: &App, frame: &mut Frame) {
@@ -13,8 +12,12 @@ pub fn render(app: &App, frame: &mut Frame) {
     frame.render_widget(outer, frame.area());
 
     let cells = grid(inner, app.cards().len(), COLUMNS);
-    for (title, cell) in app.cards().iter().zip(cells) {
-        let card = Block::bordered().title(format!(" {title} "));
+    for (i, (title, cell)) in app.cards().iter().zip(cells).enumerate() {
+        let mut card = Block::bordered().title(format!(" {title} "));
+        if i == app.focused() {
+            card = card.border_type(BorderType::Thick).border_style(Style::new().fg(Color::Cyan));
+        }
+
         frame.render_widget(card, cell);
     }
 }
@@ -39,6 +42,7 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
+    use crate::action::{Action, Direction};
 
     fn draw(width: u16, height: u16) -> Terminal<TestBackend> {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
@@ -84,5 +88,14 @@ mod tests {
         for cell in grid(area, 5, 3) {
             assert_eq!(area.intersection(cell), cell, "{cell:?} leaks out of {area:?}");
         }
+    }
+
+    #[test]
+    fn focused_card_has_thick_border() {
+        let mut app = App::new();
+        app.update(Action::Move(Direction::Right));
+        let mut terminal = Terminal::new(TestBackend::new(60, 14)).unwrap();
+        terminal.draw(|f| render(&app, f)).unwrap();
+        insta::assert_snapshot!(terminal.backend());
     }
 }

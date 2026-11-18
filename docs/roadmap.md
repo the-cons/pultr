@@ -15,7 +15,7 @@ Small steps. Each milestone ends with something you can run. Tick boxes as you g
 ## M1 — A box on screen
 
 - [x] ratatui + crossterm app loop, quit with `q`
-- [ ] Fixed grid layout with hard-coded placeholder cards
+- [x] Fixed grid layout with hard-coded placeholder cards
 - [ ] Focus movement with arrows / `hjkl`, highlighted border
 
 **Done when:** you can move between empty cards.
