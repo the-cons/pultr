@@ -1058,7 +1058,7 @@ dependencies = [
 
 [[package]]
 name = "pultr"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "pultr-core",
@@ -1067,7 +1067,7 @@ dependencies = [
 
 [[package]]
 name = "pultr-core"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "crossterm",
