@@ -20,10 +20,7 @@ pub async fn run() -> anyhow::Result<()> {
     result
 }
 
-async fn event_loop<B: Backend>(
-    terminal: &mut Terminal<B>,
-    events: &mut impl Events,
-) -> anyhow::Result<()>
+async fn event_loop<B: Backend>(terminal: &mut Terminal<B>, events: &mut impl Events) -> anyhow::Result<()>
 where
     B::Error: Send + Sync + 'static,
 {

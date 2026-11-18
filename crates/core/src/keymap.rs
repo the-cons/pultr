@@ -1,4 +1,4 @@
-use crate::action::Action;
+use crate::action::{Action, Direction};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Key -> Action. Hard-coded for now.
@@ -6,6 +6,10 @@ pub fn map(key: KeyEvent) -> Option<Action> {
     match (key.code, key.modifiers) {
         (KeyCode::Char('q'), KeyModifiers::NONE) | (KeyCode::Esc, _) => Some(Action::Quit),
         (KeyCode::Char('c'), KeyModifiers::CONTROL) => Some(Action::Quit),
+        (KeyCode::Left | KeyCode::Char('h'), KeyModifiers::NONE) => Some(Action::Move(Direction::Left)),
+        (KeyCode::Down | KeyCode::Char('j'), KeyModifiers::NONE) => Some(Action::Move(Direction::Down)),
+        (KeyCode::Up | KeyCode::Char('k'), KeyModifiers::NONE) => Some(Action::Move(Direction::Up)),
+        (KeyCode::Right | KeyCode::Char('l'), KeyModifiers::NONE) => Some(Action::Move(Direction::Right)),
         _ => None,
     }
 }
@@ -57,5 +61,22 @@ mod tests {
         let mut k = key(KeyCode::Char('q'), KeyModifiers::NONE);
         k.kind = KeyEventKind::Release;
         assert_eq!(map(k), Some(Action::Quit));
+    }
+
+    #[test]
+    fn arrows_and_hjkl_move_focus() {
+        let none = KeyModifiers::NONE;
+        for (code, dir) in [
+            (KeyCode::Left, Direction::Left),
+            (KeyCode::Char('h'), Direction::Left),
+            (KeyCode::Down, Direction::Down),
+            (KeyCode::Char('j'), Direction::Down),
+            (KeyCode::Up, Direction::Up),
+            (KeyCode::Char('k'), Direction::Up),
+            (KeyCode::Right, Direction::Right),
+            (KeyCode::Char('l'), Direction::Right),
+        ] {
+            assert_eq!(map(key(code, none)), Some(Action::Move(dir)), "{code:?}");
+        }
     }
 }
