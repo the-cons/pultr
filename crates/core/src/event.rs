@@ -3,25 +3,32 @@ use std::time::Duration;
 use anyhow::bail;
 use crossterm::event::{Event as TermEvent, EventStream, KeyEvent, KeyEventKind};
 use futures::StreamExt;
-use tokio::time::{Interval, MissedTickBehavior, interval};
+use tokio::{
+    sync::mpsc,
+    time::{Interval, MissedTickBehavior, interval},
+};
+
+use crate::refresh::Update;
 
 #[derive(Debug)]
 pub enum Event {
     Key(KeyEvent),
     Resize,
     Tick,
+    Card(Update),
 }
 
 pub struct EventSource {
     terminal: EventStream,
     tick: Interval,
+    updates: mpsc::Receiver<Update>,
 }
 
 impl EventSource {
-    pub fn new(tick_rate: Duration) -> Self {
+    pub fn new(tick_rate: Duration, updates: mpsc::Receiver<Update>) -> Self {
         let mut tick = interval(tick_rate);
         tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        Self { terminal: EventStream::new(), tick }
+        Self { terminal: EventStream::new(), tick, updates }
     }
 }
 
@@ -31,6 +38,7 @@ impl Events for EventSource {
         loop {
             tokio::select! {
                 _ = self.tick.tick() => return Ok(Event::Tick),
+                Some(update) = self.updates.recv() => return Ok(Event::Card(update)),
                 ev = self.terminal.next() => match ev {
                     Some(Ok(ev)) => if let Some(ev) = translate(ev) { return Ok(ev) },
                     Some(Err(e)) => return Err(e.into()),

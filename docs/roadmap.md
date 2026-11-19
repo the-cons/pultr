@@ -16,14 +16,14 @@ Small steps. Each milestone ends with something you can run. Tick boxes as you g
 
 - [x] ratatui + crossterm app loop, quit with `q`
 - [x] Fixed grid layout with hard-coded placeholder cards
-- [ ] Focus movement with arrows / `hjkl`, highlighted border
+- [x] Focus movement with arrows / `hjkl`, highlighted border
 
 **Done when:** you can move between empty cards.
 
 ## M2 — Card trait + mock data
 
-- [ ] `CardView`, `State`, `Card` trait in `core`
-- [ ] Per-card refresh task + channel to UI
+- [x] `CardView`, `State`, `Card` trait in `core`
+- [x] Per-card refresh task + channel to UI
 - [ ] `Battery` port in `platform`, mock implementation
 - [ ] `battery` card rendering mock data
 - [ ] First `insta` snapshot test
