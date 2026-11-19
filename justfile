@@ -52,6 +52,14 @@ pr:
 
 # Wait for CI, squash-merge the PR, back to updated main
 merge:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # A fresh PR has no checks for a few seconds; wait for them to appear (max ~60 s).
+    for _ in {1..20}; do
+        [[ "$(gh pr checks --json name --jq length 2>/dev/null || echo 0)" -gt 0 ]] && break
+        echo "waiting for CI to start…"
+        sleep 3
+    done
     gh pr checks --watch --fail-fast
     gh pr merge --squash --delete-branch
     git switch main
