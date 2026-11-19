@@ -1,9 +1,11 @@
 use crate::app::{App, COLUMNS};
+use crate::card::{self, CardView, Emphasis};
 use ratatui::Frame;
 use ratatui::layout::{Layout, Rect};
 use ratatui::prelude::Constraint;
-use ratatui::style::{Color, Style};
-use ratatui::widgets::{Block, BorderType};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::Line;
+use ratatui::widgets::{Block, BorderType, Paragraph};
 
 /// Pure view: reads `App`, draws a frame. Never mutates state.
 pub fn render(app: &App, frame: &mut Frame) {
@@ -12,14 +14,35 @@ pub fn render(app: &App, frame: &mut Frame) {
     frame.render_widget(outer, frame.area());
 
     let cells = grid(inner, app.cards().len(), COLUMNS);
-    for (i, (title, cell)) in app.cards().iter().zip(cells).enumerate() {
-        let mut card = Block::bordered().title(format!(" {title} "));
+    for (i, (slot, cell)) in app.cards().iter().zip(cells).enumerate() {
+        let mut block = Block::bordered().title(format!(" {} ", slot.title));
         if i == app.focused() {
-            card = card.border_type(BorderType::Thick).border_style(Style::new().fg(Color::Cyan));
+            block = block.border_type(BorderType::Thick).border_style(Style::new().fg(Color::Cyan));
         }
 
-        frame.render_widget(card, cell);
+        let body = block.inner(cell);
+        frame.render_widget(block, cell);
+        if let Some(view) = &slot.view {
+            render_view(view, body, frame);
+        }
     }
+}
+
+/// The inside of one card. Lines only for now.
+fn render_view(view: &CardView, area: Rect, frame: &mut Frame) {
+    let lines: Vec<Line> = view.lines.iter().map(to_tui_line).collect();
+    frame.render_widget(Paragraph::new(lines), area);
+}
+
+/// Our `card::Line` -> ratatui's `Line`. Same name, different jobs.
+fn to_tui_line(line: &card::Line) -> Line<'_> {
+    let style = match line.emphasis {
+        Emphasis::Normal => Style::new(),
+        Emphasis::Strong => Style::new().add_modifier(Modifier::BOLD),
+        Emphasis::Dim => Style::new().fg(Color::DarkGray),
+    };
+
+    Line::styled(line.text.as_str(), style)
 }
 
 /// Splits `area` into `count` equal cells
@@ -43,10 +66,12 @@ mod tests {
 
     use super::*;
     use crate::action::{Action, Direction};
+    use crate::card::State;
+    use crate::refresh::Update;
 
     fn draw(width: u16, height: u16) -> Terminal<TestBackend> {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-        terminal.draw(|f| render(&App::new(), f)).unwrap();
+        terminal.draw(|f| render(&App::demo(), f)).unwrap();
         terminal
     }
 
@@ -92,8 +117,18 @@ mod tests {
 
     #[test]
     fn focused_card_has_thick_border() {
-        let mut app = App::new();
+        let mut app = App::demo();
         app.update(Action::Move(Direction::Right));
+        let mut terminal = Terminal::new(TestBackend::new(60, 14)).unwrap();
+        terminal.draw(|f| render(&app, f)).unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn card_shows_its_lines() {
+        let mut app = App::demo();
+        let view = CardView::new(State::Ok).line(card::Line::strong("82 %")).line(card::Line::dim("charging"));
+        app.apply(Update { slot: 4, view });
         let mut terminal = Terminal::new(TestBackend::new(60, 14)).unwrap();
         terminal.draw(|f| render(&app, f)).unwrap();
         insta::assert_snapshot!(terminal.backend());

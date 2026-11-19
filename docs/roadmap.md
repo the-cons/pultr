@@ -23,7 +23,7 @@ Small steps. Each milestone ends with something you can run. Tick boxes as you g
 ## M2 — Card trait + mock data
 
 - [x] `CardView`, `State`, `Card` trait in `core`
-- [ ] Per-card refresh task + channel to UI
+- [x] Per-card refresh task + channel to UI
 - [ ] `Battery` port in `platform`, mock implementation
 - [ ] `battery` card rendering mock data
 - [ ] First `insta` snapshot test
