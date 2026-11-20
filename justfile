@@ -30,10 +30,11 @@ release version:
     [[ -z "$(git status --porcelain)" ]] || { echo "working tree not clean"; exit 1; }
     git pull --ff-only
     just check
+    trap 'echo "release failed before pushing; reset with: git reset --hard origin/main"' ERR
     cargo set-version --workspace {{version}}
     cargo check -q
-    cargo package --workspace --locked   # full verify of exactly what gets published
     git diff --quiet || git commit -am "chore: release v{{version}}"
+    cargo package --workspace --locked   # full verify of exactly the commit that gets tagged
     git tag "v{{version}}"
     git push
     git push origin "v{{version}}"
