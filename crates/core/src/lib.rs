@@ -5,6 +5,7 @@ pub mod config;
 mod event;
 mod keymap;
 pub mod refresh;
+pub mod registry;
 mod ui;
 
 use crate::{
@@ -17,7 +18,7 @@ use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc;
 
 /// Entry point: start the cards, set up the terminal, run the loop, always restore.
-/// Which cards exist is the caller's business (today: `pultr-cards`, later: config)
+/// Which cards exist is the caller's business: `app` builds them from the config via the registry.
 pub async fn run(cards: Vec<Arc<dyn Card>>) -> anyhow::Result<()> {
     let (tx, rx) = mpsc::channel(64);
     let tasks = refresh::spawn_all(&cards, tx);

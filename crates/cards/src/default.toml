@@ -1,0 +1,25 @@
+# Used when there is no config file. Your own: copy config.example.toml to ~/.config/pultr/config.toml
+
+[[card]]
+id   = "bluetooth"
+type = "bluetooth"
+
+[[card]]
+id   = "sidecar"
+type = "sidecar"
+
+[[card]]
+id   = "audio"
+type = "audio-output"
+
+[[card]]
+id   = "media"
+type = "media"
+
+[[card]]
+id   = "battery"
+type = "battery"
+
+[[card]]
+id   = "system"
+type = "system"

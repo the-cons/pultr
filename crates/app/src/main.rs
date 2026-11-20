@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
+use pultr_core::config::Config;
 use pultr_platform::Platform;
 
 #[tokio::main]
@@ -11,9 +12,14 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Command::Run { mock, config } => {
-            let _config = pultr_core::config::load(config.as_deref())?;
+            // Config and cards are ready before the TUI starts, so mistakes are plain errors on stderr.
+            let config = match pultr_core::config::load(config.as_deref())? {
+                Some(config) => config,
+                None => Config::parse(pultr_cards::DEFAULT_CONFIG)?,
+            };
             let platform = if mock { pultr_mock::platform() } else { platform() };
-            pultr_core::run(pultr_cards::default_cards(&platform)).await
+            let cards = pultr_cards::registry(&platform).build_all(&config.cards)?;
+            pultr_core::run(cards).await
         }
     }
 }

@@ -71,6 +71,18 @@ pub struct CardConfig {
     pub options: toml::Table,
 }
 
+impl CardConfig {
+    /// A card with just the required fields. Handy in tests.
+    pub fn new(id: impl Into<String>, kind: impl Into<String>) -> Self {
+        Self { id: id.into(), kind: kind.into(), title: None, options: toml::Table::new() }
+    }
+
+    /// `title` from the file, or the card type's own default.
+    pub fn title_or(&self, default: &str) -> String {
+        self.title.clone().unwrap_or_else(|| default.to_string())
+    }
+}
+
 impl Config {
     /// Parse and validate. The error says what's wrong and where (line, column).
     pub fn parse(text: &str) -> anyhow::Result<Self> {
@@ -104,23 +116,24 @@ fn is_valid_id(id: &str) -> bool {
 }
 
 /// `--config <path>` must exist. The default file may be missing: then you get the defaults.
-pub fn load(explicit: Option<&Path>) -> anyhow::Result<Config> {
+pub fn load(explicit: Option<&Path>) -> anyhow::Result<Option<Config>> {
     match explicit {
         Some(path) => read(path, true),
         None => match default_path() {
             Some(path) => read(&path, false),
-            None => Ok(Config::default()),
+            None => Ok(None),
         },
     }
 }
 
-fn read(path: &Path, required: bool) -> anyhow::Result<Config> {
+fn read(path: &Path, required: bool) -> anyhow::Result<Option<Config>> {
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
-        Err(e) if e.kind() == io::ErrorKind::NotFound && !required => return Ok(Config::default()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound && !required => return Ok(None),
         Err(e) => return Err(e).with_context(|| format!("can't read {}", path.display())),
     };
-    Config::parse(&text).with_context(|| format!("invalid config: {}", path.display()))
+    let config = Config::parse(&text).with_context(|| format!("invalid config: {}", path.display()))?;
+    Ok(Some(config))
 }
 
 /// `$XDG_CONFIG_HOME/pultr/config.toml`, else `~/.config/pultr/config.toml`. Same on macOS and Linux.
@@ -231,7 +244,15 @@ mod tests {
     #[test]
     fn missing_file() {
         let path = env::temp_dir().join("pultr-test-does-not-exist").join("config.toml");
-        assert_eq!(read(&path, false).unwrap(), Config::default());
+        assert_eq!(read(&path, false).unwrap(), None);
         assert!(format!("{:#}", read(&path, true).unwrap_err()).starts_with("can't read"));
+    }
+
+    #[test]
+    fn title_falls_back_to_the_default() {
+        let mut card = CardConfig::new("b", "battery");
+        assert_eq!(card.title_or("Battery"), "Battery");
+        card.title = Some("Power".to_string());
+        assert_eq!(card.title_or("Battery"), "Power");
     }
 }

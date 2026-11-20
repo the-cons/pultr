@@ -1,20 +1,32 @@
-//! Stand-in for cards that don't exist yet. Shrinks as real cards arrive; gone after M3.
+//! Stand-in for card types that are planned but not built yet. Shrinks as real cards arrive.
 
 use std::time::Duration;
 
 use async_trait::async_trait;
-use pultr_core::card::{Card, CardView, Line, State};
+use pultr_core::{
+    card::{Card, CardView, Line, State},
+    config::CardConfig,
+};
 
-pub struct Placeholder(pub &'static str);
+pub struct Placeholder {
+    id: String,
+    title: String,
+}
+
+impl Placeholder {
+    pub fn new(config: &CardConfig) -> Self {
+        Self { id: config.id.clone(), title: config.title_or(&config.kind) }
+    }
+}
 
 #[async_trait]
 impl Card for Placeholder {
     fn id(&self) -> &str {
-        self.0
+        &self.id
     }
 
     fn title(&self) -> &str {
-        self.0
+        &self.title
     }
 
     fn refresh_interval(&self) -> Option<Duration> {
