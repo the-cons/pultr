@@ -26,7 +26,7 @@ Small steps. Each milestone ends with something you can run. Tick boxes as you g
 - [x] Per-card refresh task + channel to UI
 - [x] `Battery` port in `platform`, mock implementation
 - [x] `battery` card rendering mock data
-- [ ] First `insta` snapshot test
+- [x] First `insta` snapshot test
 
 **Done when:** `pultr --mock` shows a live-updating battery card.
 
