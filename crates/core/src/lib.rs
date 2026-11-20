@@ -1,6 +1,7 @@
 mod action;
 mod app;
 pub mod card;
+pub mod config;
 mod event;
 mod keymap;
 pub mod refresh;
