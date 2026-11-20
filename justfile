@@ -15,7 +15,8 @@ check:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets -- -D warnings
     cargo test --workspace
-    cargo package --workspace --locked
+    # Full verify only works once the version is new, see `release`
+    cargo package --workspace --locked --no-verify
 
 # Run tests only
 test:
@@ -31,6 +32,7 @@ release version:
     just check
     cargo set-version --workspace {{version}}
     cargo check -q
+    cargo package --workspace --locked   # full verify of exactly what gets published
     git diff --quiet || git commit -am "chore: release v{{version}}"
     git tag "v{{version}}"
     git push
