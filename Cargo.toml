@@ -11,6 +11,7 @@ repository  = "https://github.com/the-cons/pultr"
 readme      = "README.md"
 
 [workspace.dependencies]
+pultr-cards     = { path = "crates/cards", version = "0.0.5" }
 pultr-core      = { path = "crates/core", version = "0.0.5" }
 pultr-mock      = { path = "crates/mock", version = "0.0.5" }
 pultr-platform  = { path ="crates/platform", version = "0.0.5" }

@@ -1,0 +1,18 @@
+[package]
+name                    = "pultr-cards"
+description             = "Built-in cards of pultr: battery, bluetooth, media…"
+version.workspace       = true
+edition.workspace       = true
+license.workspace       = true
+authors.workspace       = true
+repository.workspace    = true
+
+[dependencies]
+pultr-core.workspace     = true
+pultr-platform.workspace = true
+anyhow.workspace         = true
+async-trait.workspace    = true
+
+[dev-dependencies]
+pultr-mock.workspace     = true
+tokio.workspace          = true

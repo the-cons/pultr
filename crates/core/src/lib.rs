@@ -3,21 +3,21 @@ mod app;
 pub mod card;
 mod event;
 mod keymap;
-pub mod placeholder;
 pub mod refresh;
 mod ui;
 
 use crate::{
     app::App,
+    card::Card,
     event::{Event, EventSource, Events},
 };
 use ratatui::{Terminal, backend::Backend};
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc;
 
 /// Entry point: start the cards, set up the terminal, run the loop, always restore.
-pub async fn run() -> anyhow::Result<()> {
-    let cards = placeholder::cards();
+/// Which cards exist is the caller's business (today: `pultr-cards`, later: config)
+pub async fn run(cards: Vec<Arc<dyn Card>>) -> anyhow::Result<()> {
     let (tx, rx) = mpsc::channel(64);
     let tasks = refresh::spawn_all(&cards, tx);
     let mut app = App::new(cards.iter().map(|card| card.title().to_string()));

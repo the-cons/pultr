@@ -15,6 +15,9 @@ name = "pultr"
 path = "src/main.rs"
 
 [dependencies]
-pultr-core.workspace = true
-anyhow.workspace     = true
-tokio.workspace      = true
+pultr-cards.workspace    = true
+pultr-core.workspace     = true
+pultr-mock.workspace     = true
+pultr-platform.workspace = true
+anyhow.workspace         = true
+tokio.workspace          = true

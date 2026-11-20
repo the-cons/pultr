@@ -1072,7 +1072,22 @@ name = "pultr"
 version = "0.0.5"
 dependencies = [
  "anyhow",
+ "pultr-cards",
  "pultr-core",
+ "pultr-mock",
+ "pultr-platform",
+ "tokio",
+]
+
+[[package]]
+name = "pultr-cards"
+version = "0.0.5"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "pultr-core",
+ "pultr-mock",
+ "pultr-platform",
  "tokio",
 ]
 

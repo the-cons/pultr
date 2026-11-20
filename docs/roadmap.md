@@ -6,7 +6,7 @@ Small steps. Each milestone ends with something you can run. Tick boxes as you g
 
 - [x] Reserve the name: publish an empty `pultr` crate on crates.io, create the GitHub repo
 - [x] Create repo, licence (MIT OR Apache-2.0), `.gitignore`, README
-- [ ] Cargo workspace with empty crates: `platform`, `core`, `cards`, `mock`, `macos`, `app`
+- [x] Cargo workspace with empty crates: `platform`, `core`, `cards`, `mock`, `macos`, `app`
 - [x] GitHub Actions: build + clippy + test on `macos-latest` and `ubuntu-latest`
 - [x] `pultr --version` runs
 
@@ -24,8 +24,8 @@ Small steps. Each milestone ends with something you can run. Tick boxes as you g
 
 - [x] `CardView`, `State`, `Card` trait in `core`
 - [x] Per-card refresh task + channel to UI
-- [ ] `Battery` port in `platform`, mock implementation
-- [ ] `battery` card rendering mock data
+- [x] `Battery` port in `platform`, mock implementation
+- [x] `battery` card rendering mock data
 - [ ] First `insta` snapshot test
 
 **Done when:** `pultr --mock` shows a live-updating battery card.
