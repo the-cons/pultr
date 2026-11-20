@@ -1,0 +1,15 @@
+[package]
+name                    = "pultr-mock"
+description             = "Fake adapter for pultr: scripted data for tests, demos and screenshots"
+version.workspace       = true
+edition.workspace       = true
+license.workspace       = true
+authors.workspace       = true
+repository.workspace    = true
+
+[dependencies]
+pultr-platform.workspace    = true
+async-trait.workspace       = true
+
+[dev-dependencies]
+tokio.workspace             = true
