@@ -150,4 +150,5 @@ pultr status [--json]        # print all card states
 pultr list actions           # list every action address
 pultr doctor                 # check helpers, permissions, config
 pultr --mock                 # fake data, for demos/tests
+pultr --config <path>
 ```
