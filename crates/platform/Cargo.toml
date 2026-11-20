@@ -1,0 +1,12 @@
+[package]
+name                    = "pultr-platform"
+description             = "Ports of pultr: traits describing what it needs from the operating system"
+version.workspace       = true
+edition.workspace       = true
+license.workspace       = true
+authors.workspace       = true
+repository.workspace    = true
+
+[dependencies]
+async-trait.workspace   = true
+thiserror.workspace     = true

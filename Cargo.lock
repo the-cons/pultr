@@ -1090,6 +1090,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "pultr-mock"
+version = "0.0.5"
+dependencies = [
+ "async-trait",
+ "pultr-platform",
+ "tokio",
+]
+
+[[package]]
+name = "pultr-platform"
+version = "0.0.5"
+dependencies = [
+ "async-trait",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
