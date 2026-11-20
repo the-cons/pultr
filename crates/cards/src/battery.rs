@@ -3,31 +3,36 @@
 use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use pultr_core::card::{Card, CardView, Line, State};
+use pultr_core::{
+    card::{Card, CardView, Line, State},
+    config::CardConfig,
+};
 use pultr_platform::{Battery, BatteryStatus, ChargeState};
 
 /// At or below this, a discharging battery shows as a warning.
 const LOW_PERCENT: u8 = 20;
 
 pub struct BatteryCard {
+    id: String,
+    title: String,
     port: Option<Arc<dyn Battery>>,
 }
 
 impl BatteryCard {
-    /// `None` = this machine has no battery (or no adapter for it yet).
-    pub fn new(port: Option<Arc<dyn Battery>>) -> Self {
-        Self { port }
+    /// `port: None` = this machine has no battery (or no adapter for it yet).
+    pub fn new(config: &CardConfig, port: Option<Arc<dyn Battery>>) -> Self {
+        Self { id: config.id.clone(), title: config.title_or("battery"), port }
     }
 }
 
 #[async_trait]
 impl Card for BatteryCard {
     fn id(&self) -> &str {
-        "battery"
+        &self.id
     }
 
     fn title(&self) -> &str {
-        "battery"
+        &self.title
     }
 
     fn refresh_interval(&self) -> Option<Duration> {
@@ -125,14 +130,18 @@ mod tests {
 
     #[tokio::test]
     async fn without_port_the_card_is_unavailable() {
-        let v = BatteryCard::new(None).refresh().await.unwrap();
+        let v = card(None).refresh().await.unwrap();
         assert_eq!(v.state, State::Unavailable);
     }
 
     #[tokio::test]
     async fn reads_from_the_port() {
         let port = MockBattery::fixed(status(42, ChargeState::Discharging, Some(90)));
-        let v = BatteryCard::new(Some(Arc::new(port))).refresh().await.unwrap();
+        let v = card(Some(Arc::new(port))).refresh().await.unwrap();
         assert_eq!(texts(&v), ["42 %", "1 h 30 min left"]);
+    }
+
+    fn card(port: Option<Arc<dyn Battery>>) -> BatteryCard {
+        BatteryCard::new(&CardConfig::new("battery", "battery"), port)
     }
 }
