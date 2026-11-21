@@ -77,7 +77,7 @@ pub struct CardConfig {
     #[serde(default = "one_cell")]
     pub span: [usize; 2],
 
-    /// `action = "key"`: global hotkeys for this card's actions.
+    /// `action = "key"` or `"action:argument" = "key"`: global hotkeys for this card's actions.
     #[serde(default)]
     pub keys: BTreeMap<String, Key>,
 

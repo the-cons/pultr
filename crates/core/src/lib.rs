@@ -33,9 +33,9 @@ pub async fn run(cards: Vec<Arc<dyn Card>>, config: &Config) -> anyhow::Result<(
 
     let (tx, rx) = mpsc::channel(64);
     let tasks = refresh::spawn_all(&cards, tx.clone());
-    let run_action = |slot: usize, action: String| {
+    let run_action = |slot: usize, action: String, arg: Option<String>| {
         if let Some(card) = cards.get(slot) {
-            refresh::spawn_action(slot, card.clone(), action, tx.clone());
+            refresh::spawn_action(slot, card.clone(), action, arg, tx.clone());
         }
     };
 
@@ -54,7 +54,7 @@ async fn event_loop<B: Backend>(
     events: &mut impl Events,
     app: &mut App,
     keymap: &Keymap,
-    mut run_action: impl FnMut(usize, String),
+    mut run_action: impl FnMut(usize, String, Option<String>),
 ) -> anyhow::Result<()>
 where
     B::Error: Send + Sync + 'static,
@@ -65,8 +65,8 @@ where
         match events.next().await? {
             Event::Key(key) => {
                 if let Some(action) = keymap.map(key) {
-                    if let Action::Run { slot, action } = &action {
-                        run_action(*slot, action.clone());
+                    if let Action::Run { slot, action, arg } = &action {
+                        run_action(*slot, action.clone(), arg.clone());
                     }
                     app.update(action);
                 }
@@ -119,20 +119,20 @@ mod tests {
     #[tokio::test]
     async fn q_ends_the_loop() {
         let mut events = Scripted::new([key('q')]);
-        event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_, _| {}).await.unwrap();
+        event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_, _, _| {}).await.unwrap();
     }
 
     #[tokio::test]
     async fn loop_survives_ticks_resizes_and_unknown_keys() {
         let mut events = Scripted::new([Event::Tick, Event::Resize, key('x'), key('q')]);
-        event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_, _| {}).await.unwrap();
+        event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_, _, _| {}).await.unwrap();
         assert!(events.0.is_empty(), "loop stopped before reaching q");
     }
 
     #[tokio::test]
     async fn loop_keeps_running_without_quit() {
         let mut events = Scripted::new([key('x'), Event::Tick]);
-        let err = event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_, _| {})
+        let err = event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_, _, _| {})
             .await
             .unwrap_err();
         assert_eq!(err.to_string(), "script exhausted");
@@ -143,26 +143,27 @@ mod tests {
         let view = CardView::new(State::Ok).line(Line::new("hi"));
         let mut events = Scripted::new([Event::Card(Update { slot: 1, view: view.clone() }), key('q')]);
         let mut app = App::demo();
-        event_loop(&mut terminal(), &mut events, &mut app, &Keymap::default(), |_, _| {}).await.unwrap();
+        event_loop(&mut terminal(), &mut events, &mut app, &Keymap::default(), |_, _, _| {}).await.unwrap();
         assert_eq!(app.cards()[1].view, Some(view));
     }
 
     #[tokio::test]
     async fn card_keys_run_actions() {
         let config = Config::parse(
-            "[[card]]\nid = \"a\"\ntype = \"x\"\n[[card]]\nid = \"b\"\ntype = \"x\"\nkeys = { toggle = \"t\" }",
+            "[[card]]\nid = \"a\"\ntype = \"x\"\n[[card]]\nid = \"b\"\ntype = \"x\"\nkeys = { toggle = \"t\", \"toggle:AirPods\" = \"u\" }",
         )
         .unwrap();
         let keymap = Keymap::new(&config.cards).unwrap();
-        let mut events = Scripted::new([key('t'), key('q')]);
+        let mut events = Scripted::new([key('t'), key('u'), key('q')]);
         let mut app = App::demo();
 
         let mut ran = Vec::new();
-        event_loop(&mut terminal(), &mut events, &mut app, &keymap, |slot, action| ran.push((slot, action)))
+        event_loop(&mut terminal(), &mut events, &mut app, &keymap, |slot, action, arg| ran.push((slot, action, arg)))
             .await
             .unwrap();
 
-        assert_eq!(ran, [(1, "toggle".to_string())]);
+        let toggle = |arg: Option<&str>| (1, "toggle".to_string(), arg.map(String::from));
+        assert_eq!(ran, [toggle(None), toggle(Some("AirPods"))]);
         assert_eq!(app.focused(), 1);
     }
 }

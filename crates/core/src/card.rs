@@ -25,8 +25,9 @@ pub trait Card: Send + Sync {
     /// Ask the system for the current state.
     async fn refresh(&self) -> anyhow::Result<CardView>;
 
-    /// Run one of the actions from [`Card::actions`].
-    async fn run(&self, action: &str) -> anyhow::Result<()> {
+    /// Run one of the actions from [`Card::actions`]. `arg` is what came after the `:`
+    /// (`AirPods Pro` in `toggle:AirPods Pro`); most actions take none.
+    async fn run(&self, action: &str, _arg: Option<&str>) -> anyhow::Result<()> {
         anyhow::bail!("card `{}` has no action `{action}`", self.id())
     }
 }
@@ -231,7 +232,7 @@ mod tests {
 
     #[tokio::test]
     async fn unknown_action_is_an_error() {
-        let err = Fixed.run("explode").await.unwrap_err();
+        let err = Fixed.run("explode", None).await.unwrap_err();
         assert_eq!(err.to_string(), "card `fixed` has no action `explode`");
     }
 }

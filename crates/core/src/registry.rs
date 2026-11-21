@@ -7,7 +7,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context, bail};
 
-use crate::{card::Card, config::CardConfig};
+use crate::{action, card::Card, config::CardConfig};
 
 /// Builds one card from its `[[card]]` table. May fail, e.g. on a missing `device`.
 type Constructor = Box<dyn Fn(&CardConfig) -> anyhow::Result<Arc<dyn Card>>>;
@@ -54,11 +54,12 @@ impl Registry {
     }
 }
 
-/// Every action in `keys` must be one the card actually offers.
+/// Every action in `keys` must be one the card actually offers. The argument is the card's business.
 fn check_keys(config: &CardConfig, card: &dyn Card) -> anyhow::Result<()> {
     let offered: Vec<String> = card.actions().into_iter().map(|spec| spec.id).collect();
-    for action in config.keys.keys() {
-        if !offered.contains(action) {
+    for name in config.keys.keys() {
+        let (action, _arg) = action::split(name);
+        if !offered.iter().any(|id| id == action) {
             let list = if offered.is_empty() { "none".to_string() } else { offered.join(", ") };
             bail!("card `{}`: no action `{action}` to put a key on (it has: {list})", config.id);
         }
@@ -143,6 +144,17 @@ mod tests {
         assert!(registry().build(&config).is_ok());
 
         config.keys.insert("explode".to_string(), "x".parse().unwrap());
+        let err = registry().build(&config).err().unwrap();
+        assert_eq!(err.to_string(), "card `a`: no action `explode` to put a key on (it has: toggle)");
+    }
+
+    #[test]
+    fn keys_with_an_argument_are_checked_by_their_action() {
+        let mut config = CardConfig::new("a", "named");
+        config.keys.insert("toggle:AirPods".to_string(), "t".parse().unwrap());
+        assert!(registry().build(&config).is_ok());
+
+        config.keys.insert("explode:AirPods".to_string(), "x".parse().unwrap());
         let err = registry().build(&config).err().unwrap();
         assert_eq!(err.to_string(), "card `a`: no action `explode` to put a key on (it has: toggle)");
     }
