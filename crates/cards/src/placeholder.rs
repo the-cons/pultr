@@ -4,18 +4,22 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use pultr_core::{
-    card::{Card, CardView, Line, State},
+    card::{ActionSpec, Card, CardView, Line, State},
     config::CardConfig,
 };
 
 pub struct Placeholder {
     id: String,
     title: String,
+    /// Whatever the config put keys on, so example configs load before the real card exists.
+    actions: Vec<ActionSpec>,
 }
 
 impl Placeholder {
     pub fn new(config: &CardConfig) -> Self {
-        Self { id: config.id.clone(), title: config.title_or(&config.kind) }
+        let actions =
+            config.keys.keys().map(|id| ActionSpec { id: id.clone(), label: id.clone(), key: None }).collect();
+        Self { id: config.id.clone(), title: config.title_or(&config.kind), actions }
     }
 }
 
@@ -29,11 +33,19 @@ impl Card for Placeholder {
         &self.title
     }
 
+    fn actions(&self) -> Vec<ActionSpec> {
+        self.actions.clone()
+    }
+
     fn refresh_interval(&self) -> Option<Duration> {
         None // nothing changes, one view is enough
     }
 
     async fn refresh(&self) -> anyhow::Result<CardView> {
         Ok(CardView::new(State::Ok).line(Line::dim("coming soon")))
+    }
+
+    async fn run(&self, _action: &str) -> anyhow::Result<()> {
+        Ok(()) // nothing to do yet; the card stays "coming soon"
     }
 }

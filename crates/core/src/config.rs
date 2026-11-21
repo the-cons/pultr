@@ -3,14 +3,18 @@
 //! Parsing is pure (`Config::parse`), so almost everything is testable without files.
 
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     env,
     ffi::OsString,
     fs, io,
     path::{Path, PathBuf},
 };
 
-use crate::layout::{self, Placement};
+use crate::{
+    key::Key,
+    keymap::Keymap,
+    layout::{self, Placement},
+};
 use anyhow::{Context, bail};
 use serde::Deserialize;
 
@@ -73,8 +77,11 @@ pub struct CardConfig {
     #[serde(default = "one_cell")]
     pub span: [usize; 2],
 
-    /// Everything else: card-specific fields like `device`. Later steps promote
-    /// common ones (`pos`, `span`, `keys`) to real fields above.
+    /// `action = "key"`: global hotkeys for this card's actions.
+    #[serde(default)]
+    pub keys: BTreeMap<String, Key>,
+
+    /// Everything else: card-specific fields like `device`.
     #[serde(flatten)]
     pub options: toml::Table,
 }
@@ -82,7 +89,15 @@ pub struct CardConfig {
 impl CardConfig {
     /// A card with just the required fields. Handy in tests.
     pub fn new(id: impl Into<String>, kind: impl Into<String>) -> Self {
-        Self { id: id.into(), kind: kind.into(), title: None, pos: None, span: one_cell(), options: toml::Table::new() }
+        Self {
+            id: id.into(),
+            kind: kind.into(),
+            title: None,
+            pos: None,
+            span: one_cell(),
+            keys: BTreeMap::new(),
+            options: toml::Table::new(),
+        }
     }
 
     /// `title` from the file, or the card type's own default.
@@ -115,6 +130,7 @@ impl Config {
             }
         }
         self.layout()?;
+        Keymap::new(&self.cards)?;
         Ok(())
     }
 
@@ -202,6 +218,7 @@ mod tests {
             device = "aa-bb"
             pos    = [1, 0]
             span   = [2, 1]
+            keys   = { toggle = "ctrl-a" }
             "#,
         )
         .unwrap();
@@ -215,12 +232,26 @@ mod tests {
         assert_eq!(card.span, [2, 1]);
         assert_eq!(card.options["device"].as_str(), Some("aa-bb")); // card-specific → options
         assert!(!card.options.contains_key("pos")); // typed fields don't end up in options
+        assert_eq!(card.keys["toggle"].to_string(), "ctrl-a");
+        assert!(!card.options.contains_key("keys"));
     }
 
     #[test]
     fn pos_and_span_default() {
         let card = &Config::parse("[[card]]\nid = \"a\"\ntype = \"x\"").unwrap().cards[0];
         assert_eq!((card.pos, card.span), (None, [1, 1]));
+    }
+
+    #[test]
+    fn bad_keys_are_config_errors() {
+        assert!(
+            err("[[card]]\nid = \"a\"\ntype = \"x\"\nkeys = { toggle = \"shift-a\" }")
+                .contains("unknown key `shift-a`")
+        );
+        assert_eq!(
+            err("[[card]]\nid = \"a\"\ntype = \"x\"\nkeys = { toggle = \"q\" }"),
+            "key `q` is bound twice: built-in `quit` and `a.toggle`"
+        );
     }
 
     #[test]

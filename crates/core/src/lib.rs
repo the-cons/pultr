@@ -3,6 +3,7 @@ mod app;
 pub mod card;
 pub mod config;
 mod event;
+pub mod key;
 mod keymap;
 pub mod layout;
 pub mod refresh;
@@ -10,10 +11,12 @@ pub mod registry;
 mod ui;
 
 use crate::{
+    action::Action,
     app::App,
     card::Card,
     config::Config,
     event::{Event, EventSource, Events},
+    keymap::Keymap,
 };
 use ratatui::{Terminal, backend::Backend};
 use std::{sync::Arc, time::Duration};
@@ -26,13 +29,20 @@ pub async fn run(cards: Vec<Arc<dyn Card>>, config: &Config) -> anyhow::Result<(
     let placements = config.layout()?;
     let slots = cards.iter().zip(placements).map(|(card, placements)| (card.title().to_string(), placements));
     let mut app = App::new(config.ui.columns, slots);
+    let keymap = Keymap::new(&config.cards)?;
 
     let (tx, rx) = mpsc::channel(64);
-    let tasks = refresh::spawn_all(&cards, tx);
+    let tasks = refresh::spawn_all(&cards, tx.clone());
+    let run_action = |slot: usize, action: String| {
+        if let Some(card) = cards.get(slot) {
+            refresh::spawn_action(slot, card.clone(), action, tx.clone());
+        }
+    };
 
     let mut terminal = ratatui::init();
     let mut events = EventSource::new(Duration::from_millis(250), rx);
-    let result = event_loop(&mut terminal, &mut events, &mut app).await;
+    let result = event_loop(&mut terminal, &mut events, &mut app, &keymap, run_action).await;
+
     ratatui::restore();
 
     tasks.iter().for_each(|task| task.abort());
@@ -43,6 +53,8 @@ async fn event_loop<B: Backend>(
     terminal: &mut Terminal<B>,
     events: &mut impl Events,
     app: &mut App,
+    keymap: &Keymap,
+    mut run_action: impl FnMut(usize, String),
 ) -> anyhow::Result<()>
 where
     B::Error: Send + Sync + 'static,
@@ -52,7 +64,10 @@ where
 
         match events.next().await? {
             Event::Key(key) => {
-                if let Some(action) = keymap::map(key) {
+                if let Some(action) = keymap.map(key) {
+                    if let Action::Run { slot, action } = &action {
+                        run_action(*slot, action.clone());
+                    }
                     app.update(action);
                 }
             }
@@ -104,20 +119,22 @@ mod tests {
     #[tokio::test]
     async fn q_ends_the_loop() {
         let mut events = Scripted::new([key('q')]);
-        event_loop(&mut terminal(), &mut events, &mut App::demo()).await.unwrap();
+        event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_, _| {}).await.unwrap();
     }
 
     #[tokio::test]
     async fn loop_survives_ticks_resizes_and_unknown_keys() {
         let mut events = Scripted::new([Event::Tick, Event::Resize, key('x'), key('q')]);
-        event_loop(&mut terminal(), &mut events, &mut App::demo()).await.unwrap();
+        event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_, _| {}).await.unwrap();
         assert!(events.0.is_empty(), "loop stopped before reaching q");
     }
 
     #[tokio::test]
     async fn loop_keeps_running_without_quit() {
         let mut events = Scripted::new([key('x'), Event::Tick]);
-        let err = event_loop(&mut terminal(), &mut events, &mut App::demo()).await.unwrap_err();
+        let err = event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_, _| {})
+            .await
+            .unwrap_err();
         assert_eq!(err.to_string(), "script exhausted");
     }
 
@@ -126,7 +143,26 @@ mod tests {
         let view = CardView::new(State::Ok).line(Line::new("hi"));
         let mut events = Scripted::new([Event::Card(Update { slot: 1, view: view.clone() }), key('q')]);
         let mut app = App::demo();
-        event_loop(&mut terminal(), &mut events, &mut app).await.unwrap();
+        event_loop(&mut terminal(), &mut events, &mut app, &Keymap::default(), |_, _| {}).await.unwrap();
         assert_eq!(app.cards()[1].view, Some(view));
+    }
+
+    #[tokio::test]
+    async fn card_keys_run_actions() {
+        let config = Config::parse(
+            "[[card]]\nid = \"a\"\ntype = \"x\"\n[[card]]\nid = \"b\"\ntype = \"x\"\nkeys = { toggle = \"t\" }",
+        )
+        .unwrap();
+        let keymap = Keymap::new(&config.cards).unwrap();
+        let mut events = Scripted::new([key('t'), key('q')]);
+        let mut app = App::demo();
+
+        let mut ran = Vec::new();
+        event_loop(&mut terminal(), &mut events, &mut app, &keymap, |slot, action| ran.push((slot, action)))
+            .await
+            .unwrap();
+
+        assert_eq!(ran, [(1, "toggle".to_string())]);
+        assert_eq!(app.focused(), 1);
     }
 }

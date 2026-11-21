@@ -14,6 +14,9 @@ use crate::card::{Card, CardView};
 /// A refresh that takes longer than this counts as an error.
 pub const REFRESH_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// Actions get longer: connecting headphones can take a few seconds.
+pub const ACTION_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// Guard against `Duration::ZERO` and busy loops.
 const MIN_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -45,6 +48,19 @@ async fn refresh_loop(slot: usize, card: Arc<dyn Card>, tx: mpsc::Sender<Update>
             return; // receiver gone: the UI has shut down
         }
     }
+}
+
+/// Runs one card action in the background. Afterwards the card refreshes right away,
+/// so the result shows without waiting for the next tick. A failure becomes an error view.
+pub fn spawn_action(slot: usize, card: Arc<dyn Card>, action: String, tx: mpsc::Sender<Update>) {
+    tokio::spawn(async move {
+        let view = match time::timeout(ACTION_TIMEOUT, card.run(&action)).await {
+            Ok(Ok(())) => refresh_once(card.as_ref()).await,
+            Ok(Err(e)) => CardView::error(e.to_string()),
+            Err(_) => CardView::error(format!("{action}: timed out")),
+        };
+        let _ = tx.send(Update { slot, view }).await; // UI gone: nobody to tell
+    });
 }
 
 /// Never fails: errors and timeouts become an error view.
@@ -92,6 +108,7 @@ mod tests {
         fn refresh_interval(&self) -> Option<Duration> {
             self.interval
         }
+
         async fn refresh(&self) -> anyhow::Result<CardView> {
             let n = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
             match self.behaviour {
@@ -101,6 +118,17 @@ mod tests {
                     time::sleep(Duration::from_secs(60)).await;
                     unreachable!("should have timed out")
                 }
+            }
+        }
+
+        async fn run(&self, action: &str) -> anyhow::Result<()> {
+            match action {
+                "ok" => Ok(()),
+                "hang" => {
+                    time::sleep(Duration::from_secs(60)).await;
+                    unreachable!("should have timed out")
+                }
+                other => anyhow::bail!("no action `{other}`"),
             }
         }
     }
@@ -171,6 +199,35 @@ mod tests {
         drop(rx);
 
         tasks.into_iter().next().unwrap().await.unwrap(); // returns instead of looping forever
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn action_then_fresh_view() {
+        let (tx, mut rx) = mpsc::channel(8);
+        spawn_action(3, fake(None, Behaviour::Count), "ok".to_string(), tx);
+
+        let update = rx.recv().await.unwrap();
+        assert_eq!(update.slot, 3);
+        assert_eq!(text(&update.view), "1"); // refreshed right after the action
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn failed_action_becomes_error_view() {
+        let (tx, mut rx) = mpsc::channel(8);
+        spawn_action(0, fake(None, Behaviour::Count), "explode".to_string(), tx);
+
+        let view = rx.recv().await.unwrap().view;
+        assert_eq!(view.state, State::Error);
+        assert_eq!(text(&view), "no action `explode`");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn slow_action_times_out() {
+        let (tx, mut rx) = mpsc::channel(8);
+        spawn_action(0, fake(None, Behaviour::Count), "hang".to_string(), tx);
+
+        let view = rx.recv().await.unwrap().view;
+        assert_eq!(text(&view), "hang: timed out");
     }
 
     #[tokio::test(start_paused = true)]

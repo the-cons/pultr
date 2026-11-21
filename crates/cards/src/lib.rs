@@ -61,4 +61,11 @@ mod tests {
         let card = registry(&Platform::default()).build(&config.cards[0]).unwrap();
         assert_eq!((card.id(), card.title()), ("power", "Power"));
     }
+
+    #[test]
+    fn battery_has_no_actions_to_put_keys_on() {
+        let config = Config::parse("[[card]]\nid = \"b\"\ntype = \"battery\"\nkeys = { toggle = \"t\" }").unwrap();
+        let err = registry(&Platform::default()).build(&config.cards[0]).err().unwrap();
+        assert_eq!(err.to_string(), "card `b`: no action `toggle` to put a key on (it has: none)");
+    }
 }

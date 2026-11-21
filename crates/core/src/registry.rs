@@ -42,13 +42,28 @@ impl Registry {
             let known = self.kinds().collect::<Vec<_>>().join(", ");
             bail!("card `{}`: unknown type `{}` (known: {known})", config.id, config.kind);
         };
-        constructor(config).with_context(|| format!("card `{}`", config.id))
+
+        let card = constructor(config).with_context(|| format!("card `{}`", config.id))?;
+        check_keys(config, card.as_ref())?;
+        Ok(card)
     }
 
     /// Every card, in config order. Stops at the first one that fails.
     pub fn build_all(&self, configs: &[CardConfig]) -> anyhow::Result<Vec<Arc<dyn Card>>> {
         configs.iter().map(|config| self.build(config)).collect()
     }
+}
+
+/// Every action in `keys` must be one the card actually offers.
+fn check_keys(config: &CardConfig, card: &dyn Card) -> anyhow::Result<()> {
+    let offered: Vec<String> = card.actions().into_iter().map(|spec| spec.id).collect();
+    for action in config.keys.keys() {
+        if !offered.contains(action) {
+            let list = if offered.is_empty() { "none".to_string() } else { offered.join(", ") };
+            bail!("card `{}`: no action `{action}` to put a key on (it has: {list})", config.id);
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -58,9 +73,9 @@ mod tests {
     use async_trait::async_trait;
 
     use super::*;
-    use crate::card::{CardView, State};
+    use crate::card::{ActionSpec, CardView, State};
 
-    /// Just an id; enough to see which constructor ran.
+    /// Just an id; enough to see which constructor ran. Offers one action: `toggle`.
     struct Named(String);
 
     #[async_trait]
@@ -70,6 +85,9 @@ mod tests {
         }
         fn title(&self) -> &str {
             &self.0
+        }
+        fn actions(&self) -> Vec<ActionSpec> {
+            vec![ActionSpec { id: "toggle".to_string(), label: "Toggle".to_string(), key: None }]
         }
         fn refresh_interval(&self) -> Option<Duration> {
             None
@@ -116,5 +134,16 @@ mod tests {
     #[should_panic(expected = "card type `named` registered twice")]
     fn registering_twice_is_a_bug() {
         registry().register("named", |config| Ok(Arc::new(Named(config.id.clone()))));
+    }
+
+    #[test]
+    fn keys_must_name_real_actions() {
+        let mut config = CardConfig::new("a", "named");
+        config.keys.insert("toggle".to_string(), "t".parse().unwrap());
+        assert!(registry().build(&config).is_ok());
+
+        config.keys.insert("explode".to_string(), "x".parse().unwrap());
+        let err = registry().build(&config).err().unwrap();
+        assert_eq!(err.to_string(), "card `a`: no action `explode` to put a key on (it has: toggle)");
     }
 }
