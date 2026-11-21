@@ -1,30 +1,35 @@
 use crate::{
     action::{Action, Direction},
     card::CardView,
+    layout::Placement,
     refresh::Update,
 };
 
-/// Cards per row. Fixed for now;
-pub const COLUMNS: usize = 3;
-
 pub struct CardSlot {
     pub title: String,
+    pub placement: Placement,
     pub view: Option<CardView>,
 }
 
 /// All UI state lives here. Nothing in here touches the terminal or the OS.
 pub struct App {
     running: bool,
+    columns: usize,
     cards: Vec<CardSlot>,
     focused: usize,
 }
 
 impl App {
     /// One slot per title, in grid order. No views until the first refresh lands.
-    pub fn new(titles: impl IntoIterator<Item = String>) -> Self {
-        let cards = titles.into_iter().map(|title| CardSlot { title, view: None }).collect();
-        Self { running: true, cards, focused: 0 }
+    pub fn new(columns: usize, cards: impl IntoIterator<Item = (String, Placement)>) -> Self {
+        let cards = cards.into_iter().map(|(title, placement)| CardSlot { title, placement, view: None }).collect();
+        Self { running: true, columns, cards, focused: 0 }
     }
+
+    pub fn columns(&self) -> usize {
+        self.columns
+    }
+
     pub fn is_running(&self) -> bool {
         self.running
     }
@@ -49,19 +54,18 @@ impl App {
             slot.view = Some(update.view);
         }
     }
-
+    /// Nearest card in `dir`: fewest steps that way first, then fewest steps sideways,
+    /// then the earlier card. Nothing there → focus stays.
     fn move_focus(&mut self, dir: Direction) {
-        let (i, len) = (self.focused, self.cards.len());
-        let target = match dir {
-            Direction::Left if i % COLUMNS > 0 => i - 1,
-            Direction::Right if i % COLUMNS < COLUMNS - 1 => i + 1,
-            Direction::Up if i >= COLUMNS => i - COLUMNS,
-            Direction::Down if i / COLUMNS < len.saturating_sub(1) / COLUMNS => (i + COLUMNS).min(len - 1),
-            _ => i,
-        };
-
-        if target < len {
-            self.focused = target;
+        let Some(from) = self.cards.get(self.focused).map(|slot| slot.placement) else { return };
+        let nearest = self
+            .cards
+            .iter()
+            .enumerate()
+            .filter_map(|(i, slot)| from.distance(slot.placement, dir).map(|steps| (steps, i)))
+            .min();
+        if let Some((_, i)) = nearest {
+            self.focused = i;
         }
     }
 }
@@ -70,7 +74,8 @@ impl App {
 #[cfg(test)]
 impl App {
     pub(crate) fn demo() -> Self {
-        Self::new(["bluetooth", "sidecar", "audio", "media", "battery", "system"].map(String::from))
+        let names = ["bluetooth", "sidecar", "audio", "media", "battery", "system"].map(String::from);
+        Self::new(3, names.into_iter().zip(crate::layout::row_major(6, 3)))
     }
 }
 
@@ -139,11 +144,45 @@ mod tests {
         //   3
         let mut app = app_at(2);
         app.cards.truncate(4);
-        assert_eq!(moved(app, Direction::Down), 3); // lands on the last card
+        assert_eq!(moved(app, Direction::Down), 3);
 
         let mut app = app_at(3);
         app.cards.truncate(4);
-        assert_eq!(moved(app, Direction::Right), 3); // nothing to the right
+        assert_eq!(moved(app, Direction::Right), 1);
+    }
+    /// `[col, row, cols, rows]` per card.
+    fn app_with(rects: &[[usize; 4]], focused: usize) -> App {
+        let cards = rects
+            .iter()
+            .enumerate()
+            .map(|(i, &[col, row, cols, rows])| (i.to_string(), Placement { col, row, cols, rows }));
+        let mut app = App::new(3, cards);
+        app.focused = focused;
+        app
+    }
+
+    #[test]
+    fn moves_across_spanning_cards() {
+        //   0 0 1
+        //   2 3 3
+        let grid = [[0, 0, 2, 1], [2, 0, 1, 1], [0, 1, 1, 1], [1, 1, 2, 1]];
+        assert_eq!(moved(app_with(&grid, 0), Direction::Right), 1);
+        assert_eq!(moved(app_with(&grid, 0), Direction::Down), 2); // 2 and 3 both below: earlier wins
+        assert_eq!(moved(app_with(&grid, 1), Direction::Down), 3); // only 3 is straight below
+        assert_eq!(moved(app_with(&grid, 1), Direction::Left), 0);
+        assert_eq!(moved(app_with(&grid, 3), Direction::Up), 0); // 0 and 1 both above: earlier wins
+        assert_eq!(moved(app_with(&grid, 2), Direction::Right), 3);
+    }
+
+    #[test]
+    fn jumps_over_empty_cells() {
+        //   0 . 1
+        //   . . .
+        //   2 . .
+        let grid = [[0, 0, 1, 1], [2, 0, 1, 1], [0, 2, 1, 1]];
+        assert_eq!(moved(app_with(&grid, 0), Direction::Right), 1);
+        assert_eq!(moved(app_with(&grid, 0), Direction::Down), 2);
+        assert_eq!(moved(app_with(&grid, 1), Direction::Down), 2); // nothing straight below: nearest diagonal
     }
 
     #[test]

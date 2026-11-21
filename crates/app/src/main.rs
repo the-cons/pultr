@@ -19,7 +19,7 @@ async fn main() -> anyhow::Result<()> {
             };
             let platform = if mock { pultr_mock::platform() } else { platform() };
             let cards = pultr_cards::registry(&platform).build_all(&config.cards)?;
-            pultr_core::run(cards).await
+            pultr_core::run(cards, &config).await
         }
     }
 }

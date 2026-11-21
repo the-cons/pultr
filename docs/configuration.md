@@ -77,6 +77,8 @@ cycle = ["AirPods", "MacBook Pro Speakers", "Studio Display"]  # optional subset
 
 Card-specific fields are documented per type in [cards.md](cards.md).
 
+Cards with pos are placed first. The rest fill free cells left to right, top to bottom, in config order; auto-placement never goes back to fill an earlier gap. Overlapping cards and cards outside the grid are errors at startup. ui.columns is 1–12; the grid has at most 12 rows.
+
 ### Key syntax
 
 `"a"`, `"A"` (shift), `"ctrl-a"`, `"alt-1"`, `"space"`, `"enter"`, `"f5"`.

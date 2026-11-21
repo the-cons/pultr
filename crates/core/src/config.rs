@@ -10,6 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::layout::{self, Placement};
 use anyhow::{Context, bail};
 use serde::Deserialize;
 
@@ -65,6 +66,13 @@ pub struct CardConfig {
 
     pub title: Option<String>,
 
+    /// `[column, row]`, 0-based. `None` = auto-placed after the pinned cards.
+    pub pos: Option<[usize; 2]>,
+
+    /// `[columns, rows]` the card covers.
+    #[serde(default = "one_cell")]
+    pub span: [usize; 2],
+
     /// Everything else: card-specific fields like `device`. Later steps promote
     /// common ones (`pos`, `span`, `keys`) to real fields above.
     #[serde(flatten)]
@@ -74,13 +82,17 @@ pub struct CardConfig {
 impl CardConfig {
     /// A card with just the required fields. Handy in tests.
     pub fn new(id: impl Into<String>, kind: impl Into<String>) -> Self {
-        Self { id: id.into(), kind: kind.into(), title: None, options: toml::Table::new() }
+        Self { id: id.into(), kind: kind.into(), title: None, pos: None, span: one_cell(), options: toml::Table::new() }
     }
 
     /// `title` from the file, or the card type's own default.
     pub fn title_or(&self, default: &str) -> String {
         self.title.clone().unwrap_or_else(|| default.to_string())
     }
+}
+
+fn one_cell() -> [usize; 2] {
+    [1, 1]
 }
 
 impl Config {
@@ -93,10 +105,6 @@ impl Config {
 
     /// Rules serde can't express on its own.
     fn validate(&self) -> anyhow::Result<()> {
-        if self.ui.columns == 0 {
-            bail!("ui.columns must be at least 1");
-        }
-
         let mut seen = HashSet::new();
         for card in &self.cards {
             if !is_valid_id(&card.id) {
@@ -106,7 +114,13 @@ impl Config {
                 bail!("duplicate card id `{}`", card.id);
             }
         }
+        self.layout()?;
         Ok(())
+    }
+
+    /// Where every card sits, in config order. Already checked by `parse`.
+    pub fn layout(&self) -> anyhow::Result<Vec<Placement>> {
+        layout::place(&self.cards, self.ui.columns)
     }
 }
 
@@ -186,6 +200,8 @@ mod tests {
             type   = "bluetooth"
             title  = "AirPods"
             device = "aa-bb"
+            pos    = [1, 0]
+            span   = [2, 1]
             "#,
         )
         .unwrap();
@@ -195,6 +211,16 @@ mod tests {
         assert_eq!(card.kind, "bluetooth");
         assert_eq!(card.title.as_deref(), Some("AirPods"));
         assert_eq!(card.options["device"].as_str(), Some("aa-bb")); // card-specific → options
+        assert_eq!(card.pos, Some([1, 0]));
+        assert_eq!(card.span, [2, 1]);
+        assert_eq!(card.options["device"].as_str(), Some("aa-bb")); // card-specific → options
+        assert!(!card.options.contains_key("pos")); // typed fields don't end up in options
+    }
+
+    #[test]
+    fn pos_and_span_default() {
+        let card = &Config::parse("[[card]]\nid = \"a\"\ntype = \"x\"").unwrap().cards[0];
+        assert_eq!((card.pos, card.span), (None, [1, 1]));
     }
 
     #[test]
@@ -212,7 +238,11 @@ mod tests {
 
     #[test]
     fn validation() {
-        assert_eq!(err("[ui]\ncolumns = 0"), "ui.columns must be at least 1");
+        assert_eq!(err("[ui]\ncolumns = 0"), "ui.columns must be between 1 and 12");
+        assert_eq!(
+            err("[[card]]\nid = \"a\"\ntype = \"x\"\npos = [0, 0]\n[[card]]\nid = \"b\"\ntype = \"x\"\npos = [0, 0]"),
+            "card `b` overlaps card `a`"
+        );
         assert_eq!(
             err("[[card]]\nid = \"a\"\ntype = \"x\"\n[[card]]\nid = \"a\"\ntype = \"y\""),
             "duplicate card id `a`"

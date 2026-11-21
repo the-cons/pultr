@@ -4,6 +4,7 @@ pub mod card;
 pub mod config;
 mod event;
 mod keymap;
+pub mod layout;
 pub mod refresh;
 pub mod registry;
 mod ui;
@@ -11,6 +12,7 @@ mod ui;
 use crate::{
     app::App,
     card::Card,
+    config::Config,
     event::{Event, EventSource, Events},
 };
 use ratatui::{Terminal, backend::Backend};
@@ -18,11 +20,15 @@ use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc;
 
 /// Entry point: start the cards, set up the terminal, run the loop, always restore.
-/// Which cards exist is the caller's business: `app` builds them from the config via the registry.
-pub async fn run(cards: Vec<Arc<dyn Card>>) -> anyhow::Result<()> {
+/// Which cards exist is the caller's business: `app` builds them from the config via the registry,
+/// one card per `[[card]]`, in config order.
+pub async fn run(cards: Vec<Arc<dyn Card>>, config: &Config) -> anyhow::Result<()> {
+    let placements = config.layout()?;
+    let slots = cards.iter().zip(placements).map(|(card, placements)| (card.title().to_string(), placements));
+    let mut app = App::new(config.ui.columns, slots);
+
     let (tx, rx) = mpsc::channel(64);
     let tasks = refresh::spawn_all(&cards, tx);
-    let mut app = App::new(cards.iter().map(|card| card.title().to_string()));
 
     let mut terminal = ratatui::init();
     let mut events = EventSource::new(Duration::from_millis(250), rx);
