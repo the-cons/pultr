@@ -81,6 +81,34 @@ impl Line {
     }
 }
 
+/// One row of a card's list: a paired device, an audio output…
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Item {
+    /// Stable across refreshes; actions on this row get it as their argument.
+    pub id: String,
+    /// Left side: what it is.
+    pub label: String,
+    /// Right side: how it is, e.g. `connected`. Coloured by `state`.
+    pub detail: String,
+    pub state: State,
+}
+
+impl Item {
+    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
+        Self { id: id.into(), label: label.into(), detail: String::new(), state: State::Ok }
+    }
+
+    pub fn detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = detail.into();
+        self
+    }
+
+    pub fn state(mut self, state: State) -> Self {
+        self.state = state;
+        self
+    }
+}
+
 /// Structured content of a card: what to show, not how.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CardView {
@@ -88,6 +116,8 @@ pub struct CardView {
     pub lines: Vec<Line>,
     /// Progress bar, 0.0-1.0.
     pub gauge: Option<f32>,
+    /// A list below the lines, one row per item.
+    pub items: Vec<Item>,
 }
 
 impl CardView {
@@ -110,6 +140,11 @@ impl CardView {
         self
     }
 
+    pub fn item(mut self, item: Item) -> Self {
+        self.items.push(item);
+        self
+    }
+
     /// Clamped to 0.0–1.0; NaN becomes 0.0.
     pub fn gauge(mut self, ratio: f32) -> Self {
         self.gauge = Some(if ratio.is_nan() { 0.0 } else { ratio.clamp(0.0, 1.0) });
@@ -128,6 +163,24 @@ mod tests {
         let view = CardView::new(State::Active).line(Line::strong("82 %")).line(Line::new("charging"));
         assert_eq!(view.state, State::Active);
         assert_eq!(view.lines, vec![Line::strong("82 %"), Line::new("charging")]);
+    }
+
+    #[test]
+    fn items_keep_their_order_and_fields() {
+        let view = CardView::new(State::Ok)
+            .item(Item::new("aa-01", "AirPods").detail("connected").state(State::Active))
+            .item(Item::new("aa-02", "Keyboard"));
+
+        assert_eq!(
+            view.items[0],
+            Item {
+                id: "aa-01".to_string(),
+                label: "AirPods".to_string(),
+                detail: "connected".to_string(),
+                state: State::Active,
+            }
+        );
+        assert_eq!((view.items[1].detail.as_str(), view.items[1].state), ("", State::Ok)); // defaults
     }
 
     #[test]

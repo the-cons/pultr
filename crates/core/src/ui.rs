@@ -1,5 +1,5 @@
 use crate::app::App;
-use crate::card::{self, CardView, Emphasis, State};
+use crate::card::{self, CardView, Emphasis, Item, State};
 use crate::layout::Placement;
 use ratatui::Frame;
 use ratatui::layout::{Layout, Rect};
@@ -38,8 +38,10 @@ pub fn render(app: &App, frame: &mut Frame) {
 fn render_view(view: &CardView, area: Rect, frame: &mut Frame) {
     let lines: Vec<Line> = view.lines.iter().map(to_tui_line).collect();
     let text_height = u16::try_from(lines.len()).unwrap_or(u16::MAX);
-    let [text_area, gauge_area] =
-        Layout::vertical([Constraint::Length(text_height), Constraint::Length(1)]).areas(area);
+    let gauge_height = u16::from(view.gauge.is_some());
+    let [text_area, gauge_area, list_area] =
+        Layout::vertical([Constraint::Length(text_height), Constraint::Length(gauge_height), Constraint::Fill(1)])
+            .areas(area);
 
     frame.render_widget(Paragraph::new(lines), text_area);
     if let Some(ratio) = view.gauge {
@@ -48,6 +50,32 @@ fn render_view(view: &CardView, area: Rect, frame: &mut Frame) {
             .label("")
             .filled_style(Style::new().fg(state_color(view.state)));
         frame.render_widget(gauge, gauge_area);
+    }
+
+    render_items(&view.items, list_area, frame);
+}
+
+/// One row per item: label on the left, detail on the right. Rows that don't fit are cut off.
+fn render_items(items: &[Item], area: Rect, frame: &mut Frame) {
+    for (item, row) in items.iter().zip(area.rows()) {
+        let detail = Line::styled(item.detail.as_str(), detail_style(item.state));
+        let detail_width = u16::try_from(detail.width()).unwrap_or(u16::MAX);
+        // The gutter stays empty for now; the selection marker goes there.
+        let [_gutter, label_area, detail_area] =
+            Layout::horizontal([Constraint::Length(1), Constraint::Fill(1), Constraint::Length(detail_width)])
+                .spacing(1)
+                .areas(row);
+
+        frame.render_widget(Line::raw(item.label.as_str()), label_area);
+        frame.render_widget(detail, detail_area);
+    }
+}
+
+/// `Ok` is the quiet normal case for a row, so it stays grey. Everything else gets its state colour.
+fn detail_style(state: State) -> Style {
+    match state {
+        State::Ok => Style::new().fg(Color::DarkGray),
+        other => Style::new().fg(state_color(other)),
     }
 }
 
@@ -200,6 +228,21 @@ mod tests {
         let view = CardView::new(State::Ok).line(card::Line::strong("82 %")).line(card::Line::dim("charging"));
         app.apply(Update { slot: 4, view });
         let mut terminal = Terminal::new(TestBackend::new(60, 14)).unwrap();
+        terminal.draw(|f| render(&app, f)).unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn card_shows_its_items() {
+        let mut app = App::demo();
+        let view = CardView::new(State::Active)
+            .line(card::Line::strong("on"))
+            .item(card::Item::new("1", "AirPods Pro").detail("not connected"))
+            .item(card::Item::new("2", "Magic Keyboard").detail("connected").state(State::Active))
+            .item(card::Item::new("3", "A device with a really long name").detail("connected"))
+            .item(card::Item::new("4", "Cut off: no room left"));
+        app.apply(Update { slot: 0, view });
+        let mut terminal = Terminal::new(TestBackend::new(90, 14)).unwrap();
         terminal.draw(|f| render(&app, f)).unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
