@@ -4,7 +4,7 @@ default:
 
 # Run the TUI (pass args: just run --version)
 run *args:
-    cargo run -p pultr -- {{args}}
+    cargo run -p pultr -- {{ args }}
 
 # Format code
 fmt:
@@ -14,13 +14,13 @@ fmt:
 check:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets -- -D warnings
-    cargo test --workspace
+    cargo nextest run --workspace
     # Full verify only works once the version is new, see `release`
     cargo package --workspace --locked --no-verify
 
 # Run tests only
-test:
-    cargo test --workspace
+test *args:
+    cargo nextest run --workspace {{ args }}
 
 # Release a new version: just release 0.1.0
 release version:
@@ -31,20 +31,20 @@ release version:
     git pull --ff-only
     just check
     trap 'echo "release failed before pushing; reset with: git reset --hard origin/main"' ERR
-    cargo set-version --workspace {{version}}
+    cargo set-version --workspace {{ version }}
     cargo check -q
-    git diff --quiet || git commit -am "chore: release v{{version}}"
+    git diff --quiet || git commit -am "chore: release v{{ version }}"
     cargo package --workspace --locked   # full verify of exactly the commit that gets tagged
-    git tag "v{{version}}"
+    git tag "v{{ version }}"
     git push
-    git push origin "v{{version}}"
-    echo "Released v{{version}}: follow it with: gh run watch"
+    git push origin "v{{ version }}"
+    echo "Released v{{ version }}: follow it with: gh run watch"
 
 # Start a feature branch from fresh main: just start feat/bluetooth-card
 start branch:
     git switch main
     git pull --ff-only
-    git switch -c "{{branch}}"
+    git switch -c "{{ branch }}"
 
 # Run checks, push the branch and open a PR
 pr:
@@ -71,4 +71,4 @@ merge:
 
 # Run tests, then review any changed snapshots
 snap:
-    cargo insta test --workspace --review
+    cargo insta test --workspace --review --test-runner nextest
