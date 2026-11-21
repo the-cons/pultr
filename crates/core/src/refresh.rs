@@ -52,9 +52,9 @@ async fn refresh_loop(slot: usize, card: Arc<dyn Card>, tx: mpsc::Sender<Update>
 
 /// Runs one card action in the background. Afterwards the card refreshes right away,
 /// so the result shows without waiting for the next tick. A failure becomes an error view.
-pub fn spawn_action(slot: usize, card: Arc<dyn Card>, action: String, tx: mpsc::Sender<Update>) {
+pub fn spawn_action(slot: usize, card: Arc<dyn Card>, action: String, arg: Option<String>, tx: mpsc::Sender<Update>) {
     tokio::spawn(async move {
-        let view = match time::timeout(ACTION_TIMEOUT, card.run(&action)).await {
+        let view = match time::timeout(ACTION_TIMEOUT, card.run(&action, arg.as_deref())).await {
             Ok(Ok(())) => refresh_once(card.as_ref()).await,
             Ok(Err(e)) => CardView::error(e.to_string()),
             Err(_) => CardView::error(format!("{action}: timed out")),
@@ -121,9 +121,10 @@ mod tests {
             }
         }
 
-        async fn run(&self, action: &str) -> anyhow::Result<()> {
+        async fn run(&self, action: &str, arg: Option<&str>) -> anyhow::Result<()> {
             match action {
                 "ok" => Ok(()),
+                "echo" => anyhow::bail!("got {arg:?}"),
                 "hang" => {
                     time::sleep(Duration::from_secs(60)).await;
                     unreachable!("should have timed out")
@@ -204,7 +205,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn action_then_fresh_view() {
         let (tx, mut rx) = mpsc::channel(8);
-        spawn_action(3, fake(None, Behaviour::Count), "ok".to_string(), tx);
+        spawn_action(3, fake(None, Behaviour::Count), "ok".to_string(), None, tx);
 
         let update = rx.recv().await.unwrap();
         assert_eq!(update.slot, 3);
@@ -214,7 +215,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn failed_action_becomes_error_view() {
         let (tx, mut rx) = mpsc::channel(8);
-        spawn_action(0, fake(None, Behaviour::Count), "explode".to_string(), tx);
+        spawn_action(0, fake(None, Behaviour::Count), "explode".to_string(), None, tx);
 
         let view = rx.recv().await.unwrap().view;
         assert_eq!(view.state, State::Error);
@@ -224,10 +225,19 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn slow_action_times_out() {
         let (tx, mut rx) = mpsc::channel(8);
-        spawn_action(0, fake(None, Behaviour::Count), "hang".to_string(), tx);
+        spawn_action(0, fake(None, Behaviour::Count), "hang".to_string(), None, tx);
 
         let view = rx.recv().await.unwrap().view;
         assert_eq!(text(&view), "hang: timed out");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn action_gets_its_argument() {
+        let (tx, mut rx) = mpsc::channel(8);
+        spawn_action(0, fake(None, Behaviour::Count), "echo".to_string(), Some("AirPods Pro".to_string()), tx);
+
+        let view = rx.recv().await.unwrap().view;
+        assert_eq!(text(&view), r#"got Some("AirPods Pro")"#);
     }
 
     #[tokio::test(start_paused = true)]

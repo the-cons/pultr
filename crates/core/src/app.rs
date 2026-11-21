@@ -101,10 +101,10 @@ mod tests {
     #[test]
     fn running_an_action_focuses_its_card() {
         let mut app = App::demo();
-        app.update(Action::Run { slot: 4, action: "toggle".to_string() });
+        app.update(Action::Run { slot: 4, action: "toggle".to_string(), arg: None });
         assert_eq!(app.focused(), 4);
 
-        app.update(Action::Run { slot: 99, action: "toggle".to_string() }); // no such card: ignored
+        app.update(Action::Run { slot: 99, action: "toggle".to_string(), arg: None }); // no such card: ignored
         assert_eq!(app.focused(), 4);
     }
 

@@ -45,7 +45,7 @@ impl Card for Placeholder {
         Ok(CardView::new(State::Ok).line(Line::dim("coming soon")))
     }
 
-    async fn run(&self, _action: &str) -> anyhow::Result<()> {
+    async fn run(&self, _action: &str, _arg: Option<&str>) -> anyhow::Result<()> {
         Ok(()) // nothing to do yet; the card stays "coming soon"
     }
 }

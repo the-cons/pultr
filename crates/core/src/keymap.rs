@@ -8,7 +8,7 @@ use anyhow::bail;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::{
-    action::{Action, Direction},
+    action::{self, Action, Direction},
     config::CardConfig,
     key::Key,
 };
@@ -23,10 +23,21 @@ impl Keymap {
         let mut bindings = HashMap::new();
         let mut owners: HashMap<Key, String> = HashMap::new(); // who has the key, for error messages
 
+        for card in cards {
+            for name in card.keys.keys() {
+                let (action, arg) = action::split(name);
+                if action.is_empty() || arg == Some("") {
+                    bail!("card `{}`: `{name}` is not an action (write `toggle` or `toggle:AirPods Pro`)", card.id);
+                }
+            }
+        }
+
         let built_in = built_in().into_iter().map(|(key, action, name)| (key, action, format!("built-in `{name}`")));
         let from_cards = cards.iter().enumerate().flat_map(|(slot, card)| {
-            card.keys.iter().map(move |(action, &key)| {
-                (key, Action::Run { slot, action: action.clone() }, format!("`{}.{action}`", card.id))
+            card.keys.iter().map(move |(name, &key)| {
+                let (action, arg) = action::split(name);
+                let run = Action::Run { slot, action: action.to_string(), arg: arg.map(String::from) };
+                (key, run, format!("`{}.{name}`", card.id))
             })
         });
 
@@ -110,7 +121,7 @@ mod tests {
         )
         .unwrap();
 
-        let run = |action: &str| Some(Action::Run { slot: 1, action: action.to_string() });
+        let run = |action: &str| Some(Action::Run { slot: 1, action: action.to_string(), arg: None });
         assert_eq!(keymap.map(key(KeyCode::Char(' '), KeyModifiers::NONE)), run("play_pause"));
         assert_eq!(keymap.map(key(KeyCode::Char('N'), KeyModifiers::SHIFT)), run("next"));
         assert_eq!(keymap.map(key(KeyCode::Char('q'), KeyModifiers::NONE)), Some(Action::Quit)); // built-ins still there
@@ -134,6 +145,44 @@ mod tests {
         .err()
         .unwrap();
         assert_eq!(err.to_string(), "key `t` is bound twice: `a.toggle` and `b.toggle`");
+    }
+
+    #[test]
+    fn card_keys_with_an_argument() {
+        let keymap = keymap(
+            r#"
+            [[card]]
+            id   = "bt"
+            type = "bluetooth"
+            keys = { "toggle:AirPods Pro" = "a", "toggle:Magic Keyboard" = "b", power = "p" }
+            "#,
+        )
+        .unwrap();
+
+        let run = |action: &str, arg: Option<&str>| {
+            Some(Action::Run { slot: 0, action: action.to_string(), arg: arg.map(String::from) })
+        };
+        assert_eq!(keymap.map(key(KeyCode::Char('a'), KeyModifiers::NONE)), run("toggle", Some("AirPods Pro")));
+        assert_eq!(keymap.map(key(KeyCode::Char('b'), KeyModifiers::NONE)), run("toggle", Some("Magic Keyboard")));
+        assert_eq!(keymap.map(key(KeyCode::Char('p'), KeyModifiers::NONE)), run("power", None));
+    }
+
+    #[test]
+    fn argument_shows_in_clash_messages() {
+        let err = keymap("[[card]]\nid = \"bt\"\ntype = \"x\"\nkeys = { \"toggle:AirPods\" = \"q\" }").err().unwrap();
+        assert_eq!(err.to_string(), "key `q` is bound twice: built-in `quit` and `bt.toggle:AirPods`");
+    }
+
+    #[test]
+    fn empty_action_or_argument_is_an_error() {
+        for name in ["toggle:", ":AirPods", ""] {
+            let config = format!("[[card]]\nid = \"bt\"\ntype = \"x\"\nkeys = {{ \"{name}\" = \"a\" }}");
+            let err = keymap(&config).err().unwrap();
+            assert_eq!(
+                err.to_string(),
+                format!("card `bt`: `{name}` is not an action (write `toggle` or `toggle:AirPods Pro`)")
+            );
+        }
     }
 
     #[test]
