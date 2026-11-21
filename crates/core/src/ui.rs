@@ -1,5 +1,6 @@
-use crate::app::{App, COLUMNS};
+use crate::app::App;
 use crate::card::{self, CardView, Emphasis, State};
+use crate::layout::Placement;
 use ratatui::Frame;
 use ratatui::layout::{Layout, Rect};
 use ratatui::prelude::Constraint;
@@ -13,7 +14,8 @@ pub fn render(app: &App, frame: &mut Frame) {
     let inner = outer.inner(frame.area());
     frame.render_widget(outer, frame.area());
 
-    let cells = grid(inner, app.cards().len(), COLUMNS);
+    let placements: Vec<Placement> = app.cards().iter().map(|slot| slot.placement).collect();
+    let cells = grid(inner, app.columns(), &placements);
     for (i, (slot, cell)) in app.cards().iter().zip(cells).enumerate() {
         let mut block = Block::bordered().title(format!(" {} ", slot.title));
 
@@ -77,18 +79,27 @@ fn safe_ratio(ratio: f32) -> f64 {
     if ratio.is_nan() { 0.0 } else { f64::from(ratio).clamp(0.0, 1.0) }
 }
 
-/// Splits `area` into `count` equal cells
-/// The last row may be partly empty.
-fn grid(area: Rect, count: usize, columns: usize) -> Vec<Rect> {
-    if count == 0 || columns == 0 {
+/// One screen area per placement. Columns share the width equally, rows the height;
+/// a spanning card gets the union of its cells.
+fn grid(area: Rect, columns: usize, placements: &[Placement]) -> Vec<Rect> {
+    let rows = placements.iter().map(|p| p.row + p.rows).max().unwrap_or(0);
+    if columns == 0 || rows == 0 {
         return Vec::new();
     }
-    let rows = count.div_ceil(columns);
+    let col_areas = Layout::horizontal(vec![Constraint::Fill(1); columns]).split(area);
     let row_areas = Layout::vertical(vec![Constraint::Fill(1); rows]).split(area);
-    row_areas
+
+    // Clamped: `layout::place` never produces out-of-grid cells, but a bad placement must not crash the app.
+    let cell = |col: usize, row: usize| {
+        let (c, r) = (col_areas[col.min(columns - 1)], row_areas[row.min(rows - 1)]);
+        Rect::new(c.x, r.y, c.width, r.height)
+    };
+    placements
         .iter()
-        .flat_map(|row| Layout::horizontal(vec![Constraint::Fill(1); columns]).split(*row).to_vec())
-        .take(count)
+        .map(|p| {
+            let (last_col, last_row) = (p.col + p.cols.max(1) - 1, p.row + p.rows.max(1) - 1);
+            cell(p.col, p.row).union(cell(last_col, last_row))
+        })
         .collect()
 }
 
@@ -99,6 +110,7 @@ mod tests {
     use super::*;
     use crate::action::{Action, Direction};
     use crate::card::State;
+    use crate::layout::row_major;
     use crate::refresh::Update;
 
     fn draw(width: u16, height: u16) -> Terminal<TestBackend> {
@@ -122,15 +134,15 @@ mod tests {
     #[test]
     fn grid_has_one_cell_per_card() {
         let area = Rect::new(0, 0, 90, 30);
-        assert_eq!(grid(area, 6, 3).len(), 6);
-        assert_eq!(grid(area, 4, 3).len(), 4); // second row only half full
-        assert!(grid(area, 0, 3).is_empty());
-        assert!(grid(area, 6, 0).is_empty());
+        assert_eq!(grid(area, 3, &row_major(6, 3)).len(), 6);
+        assert_eq!(grid(area, 3, &row_major(4, 3)).len(), 4); // second row only half full
+        assert!(grid(area, 3, &[]).is_empty());
+        assert!(grid(area, 0, &row_major(6, 3)).is_empty());
     }
 
     #[test]
     fn grid_fills_rows_left_to_right() {
-        let cells = grid(Rect::new(0, 0, 90, 30), 6, 3);
+        let cells = grid(Rect::new(0, 0, 90, 30), 3, &row_major(6, 3));
         // first row: same y, increasing x
         assert_eq!(cells[0].y, cells[2].y);
         assert!(cells[0].x < cells[1].x && cells[1].x < cells[2].x);
@@ -142,9 +154,35 @@ mod tests {
     #[test]
     fn grid_cells_stay_inside_the_area() {
         let area = Rect::new(2, 1, 61, 17); // odd sizes on purpose
-        for cell in grid(area, 5, 3) {
+        for cell in grid(area, 3, &row_major(5, 3)) {
             assert_eq!(area.intersection(cell), cell, "{cell:?} leaks out of {area:?}");
         }
+    }
+
+    #[test]
+    fn spanning_card_covers_its_cells() {
+        //   w w a
+        //   b t .
+        //   . t .
+        let at = |col, row, cols, rows| Placement { col, row, cols, rows };
+        let placements = [at(0, 0, 2, 1), at(2, 0, 1, 1), at(0, 1, 1, 1), at(1, 1, 1, 2)];
+        let cells = grid(Rect::new(0, 0, 90, 30), 3, &placements);
+
+        assert_eq!(cells[0], Rect::new(0, 0, 60, 10)); // wide: two columns
+        assert_eq!(cells[1], Rect::new(60, 0, 30, 10));
+        assert_eq!(cells[3], Rect::new(30, 10, 30, 20)); // tall: two rows
+    }
+
+    #[test]
+    fn renders_spanning_cards() {
+        let titles = ["wide", "a", "b", "tall"].map(String::from);
+        let at = |col, row, cols, rows| Placement { col, row, cols, rows };
+        let placements = [at(0, 0, 2, 1), at(2, 0, 1, 1), at(0, 1, 1, 1), at(1, 1, 1, 2)];
+        let app = App::new(3, titles.into_iter().zip(placements));
+
+        let mut terminal = Terminal::new(TestBackend::new(60, 14)).unwrap();
+        terminal.draw(|f| render(&app, f)).unwrap();
+        insta::assert_snapshot!(terminal.backend());
     }
 
     #[test]

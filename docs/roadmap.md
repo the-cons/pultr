@@ -33,8 +33,8 @@ Small steps. Each milestone ends with something you can run. Tick boxes as you g
 ## M3 — Config
 
 - [x] Load `config.toml` (serde), XDG/`directories` path
-- [ ] Cards created from config via registry (`type` → constructor)
-- [ ] `pos`, `span`, auto-placement
+- [x] Cards created from config via registry (`type` → constructor)
+- [x] `pos`, `span`, auto-placement
 - [ ] Per-card `keys`, global key dispatch, conflict detection
 - [ ] `config.example.toml` in repo
 
