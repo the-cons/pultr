@@ -10,6 +10,7 @@ border  = "rounded"
 id   = "bluetooth"
 type = "bluetooth"
 keys = { power = "B", "toggle:AirPods Pro" = "a" }   # a device by name (as the card shows it) or address
+# devices = ["AirPods Pro", "Magic Keyboard"]        # only these, in this order (default: all, connected first)
 
 [[card]]
 id     = "ipad"

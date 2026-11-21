@@ -71,12 +71,14 @@ Legend: **v1** = first release, **v1.x** = soon after, **later** = maybe plugin.
 
 ```toml
 [[card]]
-id   = "bluetooth"
-type = "bluetooth"
-keys = { power = "B", "toggle:AirPods Pro" = "a" }
+id      = "bluetooth"
+type    = "bluetooth"
+devices = ["AirPods Pro", "Magic Keyboard"]   # optional
+keys    = { power = "B", "toggle:AirPods Pro" = "a" }
 ```
 
-- Every paired device is a row. Inside the card (`Enter`), `space` toggles the selected device.
+- Every paired device is a row, connected ones first. Inside the card (`Enter`), `space` toggles the selected device.
+- `devices` (optional): show only these, in exactly this order. A name that matches no paired device shows as a yellow "not paired" row, so typos are easy to spot.
 - `toggle`, `connect` and `disconnect` take the device after a `:`: its name as the card shows it (any case) or its address (`aa-bb-…` or `AA:BB:…`).
 - `connect` switches Bluetooth on first if it's off. `connect`/`disconnect` do nothing if the device is already there.
 

@@ -27,7 +27,7 @@ pub fn registry(platform: &Platform) -> Registry {
     registry.register("battery", move |config| Ok(Arc::new(BatteryCard::new(config, battery.clone()))));
 
     let bluetooth = platform.bluetooth.clone();
-    registry.register("bluetooth", move |config| Ok(Arc::new(BluetoothCard::new(config, bluetooth.clone()))));
+    registry.register("bluetooth", move |config| Ok(Arc::new(BluetoothCard::new(config, bluetooth.clone())?)));
 
     for kind in PLANNED {
         registry.register(kind, |config| Ok(Arc::new(Placeholder::new(config))));
