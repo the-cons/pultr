@@ -84,7 +84,7 @@ Cards with pos are placed first. The rest fill free cells left to right, top to 
 `"a"`, `"A"` (shift), `"ctrl-a"`, `"alt-1"`, `"space"`, `"enter"`, `"f5"`.
 Conflicting keys are reported at load time.
 
-Built-in keys can’t be used by cards: q, esc, ctrl-c (quit), arrows and h j k l (move). A card key must name an action the card offers. Pressing it runs the action and focuses the card. Rebinding the built-in keys ([keys]) isn’t supported yet.
+Built-in keys can’t be used by cards: q, ctrl-c (quit), enter (go inside a card), esc (back), arrows and h j k l (move). Inside a card, j/k/↑/↓ pick a row and space/enter run it; a card key on space works everywhere except inside a card. A card key must name an action the card offers. Pressing it runs the action and focuses the card. Rebinding the built-in keys ([keys]) isn’t supported yet.
 
 An action can take an argument after a `:`, for actions that work on one item of a card: `keys = { "toggle:AirPods Pro" = "a" }`. TOML needs the quotes because of the `:` and the space. Everything after the first `:` is the argument, so addresses like `aa:bb:…` work.
 

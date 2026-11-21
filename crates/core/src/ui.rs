@@ -10,7 +10,8 @@ use ratatui::widgets::{Block, BorderType, LineGauge, Paragraph};
 
 /// Pure view: reads `App`, draws a frame. Never mutates state.
 pub fn render(app: &App, frame: &mut Frame) {
-    let outer = Block::bordered().title(" pultr ").title_bottom(" q quit ");
+    let hint = if app.is_inside() { " j/k select · space run · esc back " } else { " q quit " };
+    let outer = Block::bordered().title(" pultr ").title_bottom(hint);
     let inner = outer.inner(frame.area());
     frame.render_widget(outer, frame.area());
 
@@ -22,20 +23,22 @@ pub fn render(app: &App, frame: &mut Frame) {
         if let Some(view) = &slot.view {
             block = block.title_top(Line::styled(" ● ", Style::new().fg(state_color(view.state))).right_aligned());
         }
+        let inside = i == app.focused() && app.is_inside();
         if i == app.focused() {
-            block = block.border_type(BorderType::Thick).border_style(Style::new().fg(Color::Cyan));
+            let color = if inside { Color::Magenta } else { Color::Cyan };
+            block = block.border_type(BorderType::Thick).border_style(Style::new().fg(color));
         }
 
         let body = block.inner(cell);
         frame.render_widget(block, cell);
         if let Some(view) = &slot.view {
-            render_view(view, body, frame);
+            render_view(view, inside.then_some(slot.selected), body, frame);
         }
     }
 }
 
-/// The inside of one card.
-fn render_view(view: &CardView, area: Rect, frame: &mut Frame) {
+/// The inside of one card. `selected`: the row to mark, only while the user is inside this card.
+fn render_view(view: &CardView, selected: Option<usize>, area: Rect, frame: &mut Frame) {
     let lines: Vec<Line> = view.lines.iter().map(to_tui_line).collect();
     let text_height = u16::try_from(lines.len()).unwrap_or(u16::MAX);
     let gauge_height = u16::from(view.gauge.is_some());
@@ -52,22 +55,36 @@ fn render_view(view: &CardView, area: Rect, frame: &mut Frame) {
         frame.render_widget(gauge, gauge_area);
     }
 
-    render_items(&view.items, list_area, frame);
+    render_items(&view.items, selected, list_area, frame);
 }
 
-/// One row per item: label on the left, detail on the right. Rows that don't fit are cut off.
-fn render_items(items: &[Item], area: Rect, frame: &mut Frame) {
-    for (item, row) in items.iter().zip(area.rows()) {
+/// One row per item: label on the left, detail on the right. The selected row gets a `▸` and bold text.
+/// More rows than space: the list scrolls just enough to keep the selected row in view.
+fn render_items(items: &[Item], selected: Option<usize>, area: Rect, frame: &mut Frame) {
+    let skip = scroll(selected, usize::from(area.height));
+    for ((i, item), row) in items.iter().enumerate().skip(skip).zip(area.rows()) {
+        let is_selected = selected == Some(i);
         let detail = Line::styled(item.detail.as_str(), detail_style(item.state));
         let detail_width = u16::try_from(detail.width()).unwrap_or(u16::MAX);
-        // The gutter stays empty for now; the selection marker goes there.
-        let [_gutter, label_area, detail_area] =
+        let [gutter, label_area, detail_area] =
             Layout::horizontal([Constraint::Length(1), Constraint::Fill(1), Constraint::Length(detail_width)])
                 .spacing(1)
                 .areas(row);
 
-        frame.render_widget(Line::raw(item.label.as_str()), label_area);
+        let label_style = if is_selected { Style::new().add_modifier(Modifier::BOLD) } else { Style::new() };
+        if is_selected {
+            frame.render_widget(Line::styled("▸", Style::new().fg(Color::Magenta)), gutter);
+        }
+        frame.render_widget(Line::styled(item.label.as_str(), label_style), label_area);
         frame.render_widget(detail, detail_area);
+    }
+}
+
+/// How many rows to skip so row `selected` is visible in `height` rows. Pure, so it's easy to test.
+fn scroll(selected: Option<usize>, height: usize) -> usize {
+    match selected {
+        Some(i) if height > 0 => (i + 1).saturating_sub(height),
+        _ => 0,
     }
 }
 
@@ -245,6 +262,34 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(90, 14)).unwrap();
         terminal.draw(|f| render(&app, f)).unwrap();
         insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn inside_a_card_the_selected_row_is_marked() {
+        let mut app = App::demo();
+        let mut view = CardView::new(State::Active).line(card::Line::strong("on"));
+        for (id, name) in [("1", "AirPods Pro"), ("2", "Magic Keyboard"), ("3", "MX Master 3S"), ("4", "Speaker")] {
+            view = view.item(card::Item::new(id, name).detail("connected").action("toggle"));
+        }
+        app.apply(Update { slot: 0, view });
+        app.update(Action::Enter);
+        for _ in 0..3 {
+            app.update(Action::SelectNext); // onto row 4: one more than fits, so the list scrolls by one
+        }
+
+        let mut terminal = Terminal::new(TestBackend::new(90, 14)).unwrap();
+        terminal.draw(|f| render(&app, f)).unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn scroll_keeps_the_selection_visible() {
+        assert_eq!(scroll(None, 3), 0);
+        assert_eq!(scroll(Some(0), 3), 0);
+        assert_eq!(scroll(Some(2), 3), 0); // last visible row
+        assert_eq!(scroll(Some(3), 3), 1);
+        assert_eq!(scroll(Some(9), 3), 7);
+        assert_eq!(scroll(Some(5), 0), 0); // no room at all: nothing to scroll
     }
 
     #[test]

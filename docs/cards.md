@@ -13,7 +13,7 @@ A **card** is the unit of functionality: a box on screen with status and actions
 ```
 
 - **Focus**: arrows / `hjkl` move between cards; the focused card has a highlighted border.
-- **Enter** opens the card's full view: every action plus its list (e.g. all paired devices).
+- **Enter** goes inside a card that has a list (e.g. all paired devices): `j`/`k` or ↑/↓ pick a row (`▸`), `space`/`Enter` runs the row's action, `Esc` goes back. Moving sideways (`h`/`l`) also leaves.
 - **Global keys**: actions with a `key` in config work from anywhere, focused or not.
 - **States**: `ok` · `active` · `warning` · `error` · `unavailable` (greyed out, with the reason).
 

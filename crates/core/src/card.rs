@@ -92,11 +92,13 @@ pub struct Item {
     /// Right side: how it is, e.g. `connected`. Coloured by `state`.
     pub detail: String,
     pub state: State,
+    /// What Enter/space runs on this row, with `id` as the argument. `None` = nothing to do.
+    pub action: Option<String>,
 }
 
 impl Item {
     pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
-        Self { id: id.into(), label: label.into(), detail: String::new(), state: State::Ok }
+        Self { id: id.into(), label: label.into(), detail: String::new(), state: State::Ok, action: None }
     }
 
     pub fn detail(mut self, detail: impl Into<String>) -> Self {
@@ -106,6 +108,11 @@ impl Item {
 
     pub fn state(mut self, state: State) -> Self {
         self.state = state;
+        self
+    }
+
+    pub fn action(mut self, action: impl Into<String>) -> Self {
+        self.action = Some(action.into());
         self
     }
 }
@@ -169,7 +176,7 @@ mod tests {
     #[test]
     fn items_keep_their_order_and_fields() {
         let view = CardView::new(State::Ok)
-            .item(Item::new("aa-01", "AirPods").detail("connected").state(State::Active))
+            .item(Item::new("aa-01", "AirPods").detail("connected").state(State::Active).action("toggle"))
             .item(Item::new("aa-02", "Keyboard"));
 
         assert_eq!(
@@ -179,9 +186,11 @@ mod tests {
                 label: "AirPods".to_string(),
                 detail: "connected".to_string(),
                 state: State::Active,
+                action: Some("toggle".to_string()),
             }
         );
-        assert_eq!((view.items[1].detail.as_str(), view.items[1].state), ("", State::Ok)); // defaults
+        let defaults = &view.items[1];
+        assert_eq!((defaults.detail.as_str(), defaults.state, defaults.action.as_deref()), ("", State::Ok, None));
     }
 
     #[test]

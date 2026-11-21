@@ -1,6 +1,6 @@
 use crate::{
-    action::{Action, Direction},
-    card::CardView,
+    action::{Action, Direction, Run},
+    card::{CardView, Item},
     layout::Placement,
     refresh::Update,
 };
@@ -9,6 +9,15 @@ pub struct CardSlot {
     pub title: String,
     pub placement: Placement,
     pub view: Option<CardView>,
+    /// Index into the view's items. Kept while you're elsewhere, so you come back to the same row.
+    pub selected: usize,
+}
+
+impl CardSlot {
+    /// The rows of the latest view; none before the first refresh.
+    pub fn items(&self) -> &[Item] {
+        self.view.as_ref().map_or(&[], |view| &view.items)
+    }
 }
 
 /// All UI state lives here. Nothing in here touches the terminal or the OS.
@@ -17,13 +26,18 @@ pub struct App {
     columns: usize,
     cards: Vec<CardSlot>,
     focused: usize,
+    /// Inside the focused card: keys pick rows instead of moving between cards.
+    inside: bool,
 }
 
 impl App {
     /// One slot per title, in grid order. No views until the first refresh lands.
     pub fn new(columns: usize, cards: impl IntoIterator<Item = (String, Placement)>) -> Self {
-        let cards = cards.into_iter().map(|(title, placement)| CardSlot { title, placement, view: None }).collect();
-        Self { running: true, columns, cards, focused: 0 }
+        let cards = cards
+            .into_iter()
+            .map(|(title, placement)| CardSlot { title, placement, view: None, selected: 0 })
+            .collect();
+        Self { running: true, columns, cards, focused: 0, inside: false }
     }
 
     pub fn columns(&self) -> usize {
@@ -41,22 +55,72 @@ impl App {
         self.focused
     }
 
-    pub fn update(&mut self, action: Action) {
+    pub fn is_inside(&self) -> bool {
+        self.inside
+    }
+
+    /// Changes UI state. Returns the card action to run, if there is one: running it is the
+    /// event loop's job, because the loop has the cards.
+    pub fn update(&mut self, action: Action) -> Option<Run> {
         match action {
             Action::Quit => self.running = false,
-            Action::Move(dir) => self.move_focus(dir),
-            // Running is the event loop's job (it has the cards). Here: focus the card, so you see who reacted.
-            Action::Run { slot, .. } if slot < self.cards.len() => self.focused = slot,
-            Action::Run { .. } => {}
+            Action::Move(dir) => {
+                self.inside = false;
+                self.move_focus(dir);
+            }
+            Action::Enter => self.inside = self.cards.get(self.focused).is_some_and(|slot| !slot.items().is_empty()),
+            Action::Back => self.inside = false,
+            Action::SelectNext => self.select(|i, last| (i + 1).min(last)),
+            Action::SelectPrev => self.select(|i, _| i.saturating_sub(1)),
+            Action::Activate => return self.activate(),
+            // Focus the card, so you see who reacted.
+            Action::Run(run) if run.slot < self.cards.len() => {
+                if run.slot != self.focused {
+                    self.inside = false;
+                }
+                self.focused = run.slot;
+                return Some(run);
+            }
+            Action::Run(_) => {}
         }
+        None
     }
 
     /// A refresh task delivered a new view. Unknown slots are ignored.
+    /// The selection follows its row by id, so a reordered list doesn't move it to another device.
     pub fn apply(&mut self, update: Update) {
-        if let Some(slot) = self.cards.get_mut(update.slot) {
-            slot.view = Some(update.view);
-        }
+        let Some(slot) = self.cards.get_mut(update.slot) else { return };
+        let selected_id = slot.items().get(slot.selected).map(|item| item.id.clone());
+        slot.view = Some(update.view);
+
+        let items = slot.items();
+        if let Some(i) = selected_id.and_then(|id| items.iter().position(|item| item.id == id)) {
+            slot.selected = i;
+        } else if !items.is_empty() {
+            slot.selected = slot.selected.min(items.len() - 1); // row gone: stay near it
+        } // no rows (e.g. an error view): keep the index for when they come back
     }
+
+    /// Moves the selection inside the focused card. `step(current, last)` → new index.
+    fn select(&mut self, step: impl Fn(usize, usize) -> usize) {
+        if !self.inside {
+            return;
+        }
+        let Some(slot) = self.cards.get_mut(self.focused) else { return };
+        let Some(last) = slot.items().len().checked_sub(1) else { return }; // no rows
+        slot.selected = step(slot.selected.min(last), last);
+    }
+
+    /// The selected row's action, with the row's id as argument.
+    fn activate(&self) -> Option<Run> {
+        if !self.inside {
+            return None;
+        }
+        let slot = self.cards.get(self.focused)?;
+        let item = slot.items().get(slot.selected)?;
+        Some(Run { slot: self.focused, action: item.action.clone()?, arg: Some(item.id.clone()) })
+    }
+
     /// Nearest card in `dir`: fewest steps that way first, then fewest steps sideways,
     /// then the earlier card. Nothing there → focus stays.
     fn move_focus(&mut self, dir: Direction) {
@@ -85,6 +149,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::card::State;
 
     #[test]
     fn starts_running() {
@@ -101,10 +166,11 @@ mod tests {
     #[test]
     fn running_an_action_focuses_its_card() {
         let mut app = App::demo();
-        app.update(Action::Run { slot: 4, action: "toggle".to_string(), arg: None });
+        let run = |slot| Run { slot, action: "toggle".to_string(), arg: None };
+        assert_eq!(app.update(Action::Run(run(4))), Some(run(4)));
         assert_eq!(app.focused(), 4);
 
-        app.update(Action::Run { slot: 99, action: "toggle".to_string(), arg: None }); // no such card: ignored
+        assert_eq!(app.update(Action::Run(run(99))), None); // no such card: ignored
         assert_eq!(app.focused(), 4);
     }
 
@@ -206,5 +272,126 @@ mod tests {
             app.cards.clear();
             assert_eq!(moved(app, dir), 0);
         }
+    }
+
+    // ── inside a card ────────────────────────────────────
+
+    /// Rows `a`, `b`, `c`: `a` and `c` toggle, `b` has no action.
+    fn rows(ids: &[&str]) -> CardView {
+        ids.iter().fold(CardView::new(State::Ok), |view, &id| {
+            let item = Item::new(id, id.to_uppercase());
+            view.item(if id == "b" { item } else { item.action("toggle") })
+        })
+    }
+
+    /// Demo app with rows `a`, `b`, `c` in card 0, already inside it.
+    fn inside() -> App {
+        let mut app = App::demo();
+        app.apply(Update { slot: 0, view: rows(&["a", "b", "c"]) });
+        app.update(Action::Enter);
+        app
+    }
+
+    fn selected(app: &App) -> usize {
+        app.cards()[app.focused()].selected
+    }
+
+    fn toggle(slot: usize, id: &str) -> Option<Run> {
+        Some(Run { slot, action: "toggle".to_string(), arg: Some(id.to_string()) })
+    }
+
+    #[test]
+    fn enter_only_goes_into_cards_with_rows() {
+        assert!(inside().is_inside());
+
+        let mut app = App::demo(); // no views yet, so no rows
+        app.update(Action::Enter);
+        assert!(!app.is_inside());
+    }
+
+    #[test]
+    fn back_and_move_leave_the_card() {
+        let mut app = inside();
+        app.update(Action::Back);
+        assert!(!app.is_inside());
+
+        let mut app = inside();
+        app.update(Action::Move(Direction::Right));
+        assert!(!app.is_inside());
+        assert_eq!(app.focused(), 1);
+    }
+
+    #[test]
+    fn select_stops_at_both_ends() {
+        let mut app = inside();
+        app.update(Action::SelectPrev);
+        assert_eq!(selected(&app), 0);
+        for _ in 0..5 {
+            app.update(Action::SelectNext);
+        }
+        assert_eq!(selected(&app), 2);
+        app.update(Action::SelectPrev);
+        assert_eq!(selected(&app), 1);
+    }
+
+    #[test]
+    fn select_needs_to_be_inside() {
+        let mut app = inside();
+        app.update(Action::Back);
+        app.update(Action::SelectNext);
+        assert_eq!(selected(&app), 0);
+    }
+
+    #[test]
+    fn activate_runs_the_rows_action_with_its_id() {
+        let mut app = inside();
+        assert_eq!(app.update(Action::Activate), toggle(0, "a"));
+
+        app.update(Action::SelectNext);
+        assert_eq!(app.update(Action::Activate), None); // `b` has no action
+
+        app.update(Action::SelectNext);
+        assert_eq!(app.update(Action::Activate), toggle(0, "c"));
+
+        app.update(Action::Back);
+        assert_eq!(app.update(Action::Activate), None); // not inside
+    }
+
+    #[test]
+    fn selection_follows_its_row_across_refreshes() {
+        let mut app = inside();
+        app.update(Action::SelectNext); // on `b`
+
+        app.apply(Update { slot: 0, view: rows(&["c", "a", "b"]) }); // reordered
+        assert_eq!(selected(&app), 2);
+
+        app.apply(Update { slot: 0, view: rows(&["a"]) }); // `b` is gone: nearest row
+        assert_eq!(selected(&app), 0);
+    }
+
+    #[test]
+    fn error_view_keeps_the_selection_for_later() {
+        let mut app = inside();
+        app.update(Action::SelectNext);
+        app.update(Action::SelectNext); // on `c`
+
+        app.apply(Update { slot: 0, view: CardView::error("boom") });
+        assert!(app.is_inside());
+        assert_eq!(app.update(Action::Activate), None); // nothing to run on
+
+        app.apply(Update { slot: 0, view: rows(&["a", "b", "c"]) });
+        assert_eq!(app.update(Action::Activate), toggle(0, "c"));
+    }
+
+    #[test]
+    fn card_key_on_another_card_leaves_this_one() {
+        let mut app = inside();
+        let run = Run { slot: 3, action: "toggle".to_string(), arg: None };
+        app.update(Action::Run(run));
+        assert_eq!((app.focused(), app.is_inside()), (3, false));
+
+        let mut app = inside();
+        app.update(Action::Run(Run { slot: 0, action: "toggle".to_string(), arg: None }));
+        assert!(app.is_inside()); // same card: stay
     }
 }

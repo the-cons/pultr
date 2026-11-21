@@ -11,7 +11,7 @@ pub mod registry;
 mod ui;
 
 use crate::{
-    action::Action,
+    action::Run,
     app::App,
     card::Card,
     config::Config,
@@ -33,9 +33,9 @@ pub async fn run(cards: Vec<Arc<dyn Card>>, config: &Config) -> anyhow::Result<(
 
     let (tx, rx) = mpsc::channel(64);
     let tasks = refresh::spawn_all(&cards, tx.clone());
-    let run_action = |slot: usize, action: String, arg: Option<String>| {
-        if let Some(card) = cards.get(slot) {
-            refresh::spawn_action(slot, card.clone(), action, arg, tx.clone());
+    let run_action = |run: Run| {
+        if let Some(card) = cards.get(run.slot) {
+            refresh::spawn_action(run.slot, card.clone(), run.action, run.arg, tx.clone());
         }
     };
 
@@ -54,7 +54,7 @@ async fn event_loop<B: Backend>(
     events: &mut impl Events,
     app: &mut App,
     keymap: &Keymap,
-    mut run_action: impl FnMut(usize, String, Option<String>),
+    mut run_action: impl FnMut(Run),
 ) -> anyhow::Result<()>
 where
     B::Error: Send + Sync + 'static,
@@ -64,11 +64,10 @@ where
 
         match events.next().await? {
             Event::Key(key) => {
-                if let Some(action) = keymap.map(key) {
-                    if let Action::Run { slot, action, arg } = &action {
-                        run_action(*slot, action.clone(), arg.clone());
-                    }
-                    app.update(action);
+                if let Some(action) = keymap.map(key, app.is_inside())
+                    && let Some(run) = app.update(action)
+                {
+                    run_action(run);
                 }
             }
 
@@ -84,7 +83,7 @@ mod tests {
     use std::collections::VecDeque;
 
     use super::*;
-    use crate::card::{CardView, Line, State};
+    use crate::card::{CardView, Item, Line, State};
     use crate::refresh::Update;
     use anyhow::bail;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -119,22 +118,21 @@ mod tests {
     #[tokio::test]
     async fn q_ends_the_loop() {
         let mut events = Scripted::new([key('q')]);
-        event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_, _, _| {}).await.unwrap();
+        event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_| {}).await.unwrap();
     }
 
     #[tokio::test]
     async fn loop_survives_ticks_resizes_and_unknown_keys() {
         let mut events = Scripted::new([Event::Tick, Event::Resize, key('x'), key('q')]);
-        event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_, _, _| {}).await.unwrap();
+        event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_| {}).await.unwrap();
         assert!(events.0.is_empty(), "loop stopped before reaching q");
     }
 
     #[tokio::test]
     async fn loop_keeps_running_without_quit() {
         let mut events = Scripted::new([key('x'), Event::Tick]);
-        let err = event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_, _, _| {})
-            .await
-            .unwrap_err();
+        let err =
+            event_loop(&mut terminal(), &mut events, &mut App::demo(), &Keymap::default(), |_| {}).await.unwrap_err();
         assert_eq!(err.to_string(), "script exhausted");
     }
 
@@ -143,7 +141,7 @@ mod tests {
         let view = CardView::new(State::Ok).line(Line::new("hi"));
         let mut events = Scripted::new([Event::Card(Update { slot: 1, view: view.clone() }), key('q')]);
         let mut app = App::demo();
-        event_loop(&mut terminal(), &mut events, &mut app, &Keymap::default(), |_, _, _| {}).await.unwrap();
+        event_loop(&mut terminal(), &mut events, &mut app, &Keymap::default(), |_| {}).await.unwrap();
         assert_eq!(app.cards()[1].view, Some(view));
     }
 
@@ -158,12 +156,34 @@ mod tests {
         let mut app = App::demo();
 
         let mut ran = Vec::new();
-        event_loop(&mut terminal(), &mut events, &mut app, &keymap, |slot, action, arg| ran.push((slot, action, arg)))
-            .await
-            .unwrap();
+        event_loop(&mut terminal(), &mut events, &mut app, &keymap, |run| ran.push(run)).await.unwrap();
 
-        let toggle = |arg: Option<&str>| (1, "toggle".to_string(), arg.map(String::from));
+        let toggle = |arg: Option<&str>| Run { slot: 1, action: "toggle".to_string(), arg: arg.map(String::from) };
         assert_eq!(ran, [toggle(None), toggle(Some("AirPods"))]);
         assert_eq!(app.focused(), 1);
+    }
+
+    #[tokio::test]
+    async fn rows_are_picked_inside_a_card() {
+        let rows = CardView::new(State::Ok)
+            .item(Item::new("aa-01", "AirPods").action("toggle"))
+            .item(Item::new("aa-02", "Keyboard").action("toggle"));
+        let enter = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        let mut events = Scripted::new([
+            Event::Card(Update { slot: 0, view: rows }),
+            enter,    // go inside
+            key('j'), // second row
+            key(' '), // run it
+            Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
+            key('j'), // outside again: moves focus down
+            key('q'),
+        ]);
+        let mut app = App::demo();
+
+        let mut ran = Vec::new();
+        event_loop(&mut terminal(), &mut events, &mut app, &Keymap::default(), |run| ran.push(run)).await.unwrap();
+
+        assert_eq!(ran, [Run { slot: 0, action: "toggle".to_string(), arg: Some("aa-02".to_string()) }]);
+        assert_eq!((app.is_inside(), app.focused()), (false, 3));
     }
 }
