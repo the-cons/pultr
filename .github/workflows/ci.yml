@@ -41,7 +41,9 @@ jobs:
       # - if: runner.os == 'Linux'
       #   run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
       - run: cargo clippy --workspace --all-targets
-      - run: cargo test --workspace
+      - uses: taiki-e/install-action@nextest
+      - run: cargo clippy --workspace --all-targets
+      - run: cargo nextest run --workspace --profile ci
 
   package:
     name: Package check

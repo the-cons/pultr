@@ -1,0 +1,8 @@
+[profile.default]
+# Show each failure as it happens, and again in the summary at the end
+failure-output = "immediate-final"
+
+[profile.ci]
+# In CI, run everything and report all failures, not just the first
+fail-fast = false
+failure-output = "immediate-final"
