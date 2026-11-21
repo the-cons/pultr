@@ -1,17 +1,15 @@
 # Copy to ~/.config/pultr/config.toml and adjust.
-# Find device addresses with: pultr init  (or `blueutil --paired` on macOS)
 
 [ui]
 theme   = "default"
 columns = 3
 border  = "rounded"
 
+# All paired devices. Enter goes inside, space toggles the selected one.
 [[card]]
-id     = "headphones"
-type   = "bluetooth"
-title  = "Headphones"
-device = "<bluetooth-address>"
-keys   = { toggle = "a" }
+id   = "bluetooth"
+type = "bluetooth"
+keys = { power = "B", "toggle:AirPods Pro" = "a" }   # a device by name (as the card shows it) or address
 
 [[card]]
 id     = "ipad"
@@ -38,4 +36,4 @@ keys = { cycle = "o" }
 id    = "desk"
 title = "Desk mode"
 key   = "D"
-steps = ["ipad.connect", "headphones.connect", "music.play"]
+steps = ["ipad.connect", "bluetooth.connect:AirPods Pro", "music.play"]

@@ -45,7 +45,7 @@ Small steps. Each milestone ends with something you can run. Tick boxes as you g
 - [x] `Bluetooth` port
 - [x] Card lists: rows, `Enter`/`Esc` to go inside a card, actions with an argument (pulled forward from M8)
 - [ ] macOS adapter using `blueutil`
-- [ ] `bluetooth` card: status + toggle
+- [x] `bluetooth` card: radio + every paired device, toggle per device
 - [ ] Action tasks with "working…" state and timeout
 - [ ] Unavailable state when `blueutil` is missing
 

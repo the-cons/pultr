@@ -204,7 +204,7 @@ mod tests {
     fn example_config_in_repo_is_valid() {
         let config = Config::parse(include_str!("../../../config.example.toml")).unwrap();
         let ids: Vec<&str> = config.cards.iter().map(|card| card.id.as_str()).collect();
-        assert_eq!(ids, ["headphones", "ipad", "battery", "music", "out"]);
+        assert_eq!(ids, ["bluetooth", "ipad", "battery", "music", "out"]);
     }
 
     #[test]

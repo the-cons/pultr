@@ -1,11 +1,13 @@
 //! Built-in cards, and the registry that knows them by `type`.
 
 mod battery;
+mod bluetooth;
 mod placeholder;
 
 use std::sync::Arc;
 
 pub use battery::BatteryCard;
+pub use bluetooth::BluetoothCard;
 use placeholder::Placeholder;
 use pultr_core::registry::Registry;
 use pultr_platform::Platform;
@@ -15,7 +17,7 @@ pub const DEFAULT_CONFIG: &str = include_str!("default.toml");
 
 /// Planned card types, shown as placeholders so example configs run today.
 /// Each one leaves this list when its real card lands.
-const PLANNED: &[&str] = &["bluetooth", "sidecar", "audio-output", "volume", "media", "system", "wifi"];
+const PLANNED: &[&str] = &["sidecar", "audio-output", "volume", "media", "system", "wifi"];
 
 /// Every built-in card type, wired to this machine's ports.
 pub fn registry(platform: &Platform) -> Registry {
@@ -23,6 +25,9 @@ pub fn registry(platform: &Platform) -> Registry {
 
     let battery = platform.battery.clone();
     registry.register("battery", move |config| Ok(Arc::new(BatteryCard::new(config, battery.clone()))));
+
+    let bluetooth = platform.bluetooth.clone();
+    registry.register("bluetooth", move |config| Ok(Arc::new(BluetoothCard::new(config, bluetooth.clone()))));
 
     for kind in PLANNED {
         registry.register(kind, |config| Ok(Arc::new(Placeholder::new(config))));
@@ -49,10 +54,7 @@ mod tests {
 
     #[test]
     fn every_type_in_the_example_config_is_known() {
-        assert_eq!(
-            ids(include_str!("../../../config.example.toml")),
-            ["headphones", "ipad", "battery", "music", "out"]
-        );
+        assert_eq!(ids(include_str!("../../../config.example.toml")), ["bluetooth", "ipad", "battery", "music", "out"]);
     }
 
     #[test]

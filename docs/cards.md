@@ -25,8 +25,7 @@ Legend: **v1** = first release, **v1.x** = soon after, **later** = maybe plugin.
 
 | Card | Shows | Actions | Release |
 |---|---|---|---|
-| `bluetooth` | One device: connected?, battery if reported | toggle, connect, disconnect | v1 |
-| `bluetooth-list` | Power state, all paired devices | power on/off, connect selected | v1 |
+| `bluetooth` | Radio on/off, every paired device as a row (connected?) | power, on, off; per device: toggle, connect, disconnect | v1 |
 | `wifi` | SSID, signal, IP | on/off | v1 |
 | `vpn` | Tailscale / WireGuard status | up/down | v1.x |
 
@@ -65,6 +64,21 @@ Legend: **v1** = first release, **v1.x** = soon after, **later** = maybe plugin.
 | `shell` | Output of a command | any commands | v1 |
 | `scene` | Scene name, last run | run | v1 |
 | `plugin` | Whatever the plugin returns | whatever the plugin declares | v1.x |
+
+## Card details
+
+### `bluetooth`
+
+```toml
+[[card]]
+id   = "bluetooth"
+type = "bluetooth"
+keys = { power = "B", "toggle:AirPods Pro" = "a" }
+```
+
+- Every paired device is a row. Inside the card (`Enter`), `space` toggles the selected device.
+- `toggle`, `connect` and `disconnect` take the device after a `:`: its name as the card shows it (any case) or its address (`aa-bb-…` or `AA:BB:…`).
+- `connect` switches Bluetooth on first if it's off. `connect`/`disconnect` do nothing if the device is already there.
 
 ## Ideas for later / plugins
 

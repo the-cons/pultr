@@ -28,12 +28,10 @@ help    = "?"
 # ── cards ──────────────────────────────────────────────
 
 [[card]]
-id     = "airpods"            # used in action addresses: airpods.toggle
+id     = "bluetooth"          # used in action addresses: bluetooth.power
 type   = "bluetooth"
-title  = "AirPods"
-device = "aa-bb-cc-dd-ee-ff"
 pos    = [0, 0]               # [column, row]
-keys   = { toggle = "a" }     # global hotkeys for this card's actions
+keys   = { power = "B", "toggle:AirPods Pro" = "a" }   # global hotkeys for this card's actions
 
 [[card]]
 id     = "ipad"
@@ -150,7 +148,7 @@ unavailable   = "dark_gray"
 
 ```bash
 pultr                        # open the TUI
-pultr run airpods.toggle     # run one action, exit
+pultr run bluetooth.power    # run one action, exit
 pultr scene desk             # run a scene
 pultr status [--json]        # print all card states
 pultr list actions           # list every action address
