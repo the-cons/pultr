@@ -1099,6 +1099,7 @@ dependencies = [
  "pultr-mock",
  "pultr-platform",
  "tokio",
+ "toml",
 ]
 
 [[package]]

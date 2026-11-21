@@ -18,14 +18,31 @@ const ACTIONS: [&str; 6] = ["power", "on", "off", "toggle", "connect", "disconne
 pub struct BluetoothCard {
     id: String,
     title: String,
+    /// `devices` from the config: show only these, in this order. `None` = every paired device.
+    devices: Option<Vec<String>>,
     port: Option<Arc<dyn Bluetooth>>,
 }
 
 impl BluetoothCard {
     /// `port: None` = no Bluetooth here. The card still builds, so config keys stay valid.
-    pub fn new(config: &CardConfig, port: Option<Arc<dyn Bluetooth>>) -> Self {
-        Self { id: config.id.clone(), title: config.title_or("bluetooth"), port }
+    pub fn new(config: &CardConfig, port: Option<Arc<dyn Bluetooth>>) -> anyhow::Result<Self> {
+        let devices = match config.options.get("devices") {
+            None => None,
+            Some(value) => Some(device_list(value)?),
+        };
+        Ok(Self { id: config.id.clone(), title: config.title_or("bluetooth"), devices, port })
     }
+}
+
+/// `devices = ["AirPods Pro", "aa-bb-…"]`: a non-empty list of names or addresses.
+fn device_list(value: &toml::Value) -> anyhow::Result<Vec<String>> {
+    const EXPECTED: &str = "`devices` must be a list of device names or addresses";
+    let list = value.as_array().context(EXPECTED)?;
+    let names = list.iter().map(|v| v.as_str().map(String::from)).collect::<Option<Vec<_>>>().context(EXPECTED)?;
+    if names.is_empty() {
+        bail!("`devices` is empty: leave it out to show every paired device");
+    }
+    Ok(names)
 }
 
 #[async_trait]
@@ -52,7 +69,7 @@ impl Card for BluetoothCard {
         };
         let powered = port.powered().await?;
         let devices = port.devices().await?;
-        Ok(view(powered, &devices))
+        Ok(view(powered, devices, self.devices.as_deref()))
     }
 
     async fn run(&self, action: &str, arg: Option<&str>) -> anyhow::Result<()> {
@@ -113,21 +130,46 @@ fn matches(device: &BtDevice, wanted: &str) -> bool {
     device.id == DeviceId::new(wanted) || device.name.eq_ignore_ascii_case(wanted.trim())
 }
 
-/// Pure: radio + devices → view. One row per paired device, in the order the system lists them.
-/// Only connected rows say so: "not connected" on every other row would crowd out the names.
-fn view(powered: bool, devices: &[BtDevice]) -> CardView {
-    let any_connected = devices.iter().any(|d| d.connected);
-    let state = if any_connected { State::Active } else { State::Ok };
-    let mut view = CardView::new(state).line(Line::strong(if powered { "on" } else { "off" }));
+/// Pure: radio + devices → view.
+/// - `wanted: None`: every paired device, connected ones first (else in the order the system lists them).
+/// - `wanted: Some(list)`: exactly those, in that order. One that isn't paired shows as a warning row.
+fn view(powered: bool, mut devices: Vec<BtDevice>, wanted: Option<&[String]>) -> CardView {
+    let rows: Vec<Item> = match wanted {
+        None => {
+            devices.sort_by_key(|d| !d.connected); // stable: equal keys keep their order
+            devices.iter().map(row).collect()
+        }
+        Some(wanted) => wanted
+            .iter()
+            .map(|name| match devices.iter().find(|d| matches(d, name)) {
+                Some(device) => row(device),
+                None => Item::new(name, name).detail("not paired").state(State::Warning),
+            })
+            .collect(),
+    };
 
-    if devices.is_empty() {
+    let state = if rows.iter().any(|r| r.state == State::Warning) {
+        State::Warning // a name in `devices` that matches nothing: probably a typo
+    } else if rows.iter().any(|r| r.state == State::Active) {
+        State::Active
+    } else {
+        State::Ok
+    };
+    let mut view = CardView::new(state).line(Line::strong(if powered { "on" } else { "off" }));
+    if rows.is_empty() {
         return view.line(Line::dim("no paired devices"));
     }
-    for device in devices {
-        let (detail, state) = if device.connected { ("connected", State::Active) } else { ("", State::Ok) };
-        view = view.item(Item::new(device.id.as_str(), &device.name).detail(detail).state(state).action("toggle"));
+    for item in rows {
+        view = view.item(item);
     }
     view
+}
+
+/// One device's row. Only connected rows say so: "not connected" on every other row
+/// would crowd out the names.
+fn row(device: &BtDevice) -> Item {
+    let (detail, state) = if device.connected { ("connected", State::Active) } else { ("", State::Ok) };
+    Item::new(device.id.as_str(), &device.name).detail(detail).state(state).action("toggle")
 }
 
 #[cfg(test)]
@@ -152,7 +194,11 @@ mod tests {
     }
 
     fn card(port: Option<MockBluetooth>) -> BluetoothCard {
-        BluetoothCard::new(&CardConfig::new("bt", "bluetooth"), port.map(|p| Arc::new(p) as _))
+        BluetoothCard::new(&CardConfig::new("bt", "bluetooth"), port.map(|p| Arc::new(p) as _)).unwrap()
+    }
+
+    fn wanted(names: &[&str]) -> Vec<String> {
+        names.iter().map(|n| n.to_string()).collect()
     }
 
     async fn rows_after(card: &BluetoothCard) -> Vec<String> {
@@ -162,28 +208,74 @@ mod tests {
     // ── view ─────────────────────────────────────────────
 
     #[test]
-    fn one_row_per_device() {
-        let v = view(true, &devices());
+    fn one_row_per_device_connected_first() {
+        let v = view(true, devices(), None);
         assert_eq!((v.state, texts(&v)), (State::Active, vec!["on"]));
-        assert_eq!(rows(&v), ["AirPods Pro: ", "Magic Keyboard: connected"]);
+        assert_eq!(rows(&v), ["Magic Keyboard: connected", "AirPods Pro: "]);
 
-        let airpods = &v.items[0];
+        let airpods = &v.items[1];
         assert_eq!(
             (airpods.id.as_str(), airpods.state, airpods.action.as_deref()),
             (AIRPODS, State::Ok, Some("toggle"))
         );
-        assert_eq!(v.items[1].state, State::Active);
+        assert_eq!(v.items[0].state, State::Active);
+    }
+
+    #[test]
+    fn connected_first_keeps_the_system_order_otherwise() {
+        let list = vec![
+            bt_device("aa-00-00-00-00-01", "A", false),
+            bt_device("aa-00-00-00-00-02", "B", true),
+            bt_device("aa-00-00-00-00-03", "C", false),
+            bt_device("aa-00-00-00-00-04", "D", true),
+        ];
+        assert_eq!(rows(&view(true, list, None)), ["B: connected", "D: connected", "A: ", "C: "]);
+    }
+
+    #[test]
+    fn devices_option_picks_and_orders() {
+        let v = view(true, devices(), Some(&wanted(&["airpods pro", "Magic Keyboard"])));
+        assert_eq!(rows(&v), ["AirPods Pro: ", "Magic Keyboard: connected"]); // config order, not connected-first
+        assert_eq!(v.state, State::Active);
+
+        let only_one = view(true, devices(), Some(&wanted(&[AIRPODS])));
+        assert_eq!(rows(&only_one), ["AirPods Pro: "]);
+        assert_eq!(only_one.state, State::Ok); // the connected keyboard isn't shown, so it doesn't count
+    }
+
+    #[test]
+    fn unknown_name_in_devices_is_a_warning_row() {
+        let v = view(true, devices(), Some(&wanted(&["Beats", "AirPods Pro"])));
+        assert_eq!(rows(&v), ["Beats: not paired", "AirPods Pro: "]);
+        assert_eq!((v.state, v.items[0].state, v.items[0].action.as_deref()), (State::Warning, State::Warning, None));
     }
 
     #[test]
     fn nothing_connected_is_calm() {
-        let v = view(false, &[bt_device(AIRPODS, "AirPods Pro", false)]);
+        let v = view(false, vec![bt_device(AIRPODS, "AirPods Pro", false)], None);
         assert_eq!((v.state, texts(&v)), (State::Ok, vec!["off"]));
     }
 
     #[test]
+    fn devices_option_must_be_a_list_of_strings() {
+        let build = |value: toml::Value| {
+            let mut config = CardConfig::new("bt", "bluetooth");
+            config.options.insert("devices".to_string(), value);
+            BluetoothCard::new(&config, None).map(|_| ()).map_err(|e| e.to_string())
+        };
+        assert!(build(toml::Value::Array(vec!["AirPods Pro".into()])).is_ok());
+        let expected = Err("`devices` must be a list of device names or addresses".to_string());
+        assert_eq!(build("AirPods Pro".into()), expected);
+        assert_eq!(build(toml::Value::Array(vec![42.into()])), expected);
+        assert_eq!(
+            build(toml::Value::Array(vec![])),
+            Err("`devices` is empty: leave it out to show every paired device".to_string())
+        );
+    }
+
+    #[test]
     fn no_devices() {
-        let v = view(true, &[]);
+        let v = view(true, vec![], None);
         assert_eq!(texts(&v), ["on", "no paired devices"]);
         assert!(v.items.is_empty());
     }
@@ -204,10 +296,10 @@ mod tests {
         let card = card(Some(MockBluetooth::with(devices())));
 
         card.run("toggle", Some(AIRPODS)).await.unwrap(); // what a row sends: the address
-        assert_eq!(rows_after(&card).await[0], "AirPods Pro: connected");
+        assert_eq!(rows_after(&card).await, ["AirPods Pro: connected", "Magic Keyboard: connected"]);
 
         card.run("toggle", Some("airpods pro")).await.unwrap(); // what a config key usually sends: the name
-        assert_eq!(rows_after(&card).await[0], "AirPods Pro: ");
+        assert_eq!(rows_after(&card).await, ["Magic Keyboard: connected", "AirPods Pro: "]); // connected first
     }
 
     #[tokio::test]
@@ -217,7 +309,7 @@ mod tests {
 
         let v = card.refresh().await.unwrap();
         assert_eq!(texts(&v), ["on"]);
-        assert_eq!(rows(&v)[0], "AirPods Pro: connected");
+        assert!(rows(&v).contains(&"AirPods Pro: connected".to_string()));
     }
 
     #[tokio::test]
