@@ -1079,7 +1079,7 @@ dependencies = [
 
 [[package]]
 name = "pultr"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "anyhow",
  "pultr-cards",
@@ -1091,7 +1091,7 @@ dependencies = [
 
 [[package]]
 name = "pultr-cards"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1103,7 +1103,7 @@ dependencies = [
 
 [[package]]
 name = "pultr-core"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1118,7 +1118,7 @@ dependencies = [
 
 [[package]]
 name = "pultr-mock"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "async-trait",
  "pultr-platform",
@@ -1127,7 +1127,7 @@ dependencies = [
 
 [[package]]
 name = "pultr-platform"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "async-trait",
  "thiserror 2.0.21",

@@ -3,7 +3,7 @@ resolver    = "3"
 members     = ["crates/*"]
 
 [workspace.package]
-version     = "0.0.6"
+version     = "0.0.7"
 edition     = "2024"
 license     = "MIT OR Apache-2.0"
 authors     = ["Constantin Theis <cons@ths.lu>"]
@@ -11,10 +11,10 @@ repository  = "https://github.com/the-cons/pultr"
 readme      = "README.md"
 
 [workspace.dependencies]
-pultr-cards     = { path = "crates/cards", version = "0.0.6" }
-pultr-core      = { path = "crates/core", version = "0.0.6" }
-pultr-mock      = { path = "crates/mock", version = "0.0.6" }
-pultr-platform  = { path ="crates/platform", version = "0.0.6" }
+pultr-cards     = { path = "crates/cards", version = "0.0.7" }
+pultr-core      = { path = "crates/core", version = "0.0.7" }
+pultr-mock      = { path = "crates/mock", version = "0.0.7" }
+pultr-platform  = { path ="crates/platform", version = "0.0.7" }
 anyhow          = "1"
 async-trait     = "0.1"
 crossterm       = { version = "0.29.0", features = ["event-stream"]}
