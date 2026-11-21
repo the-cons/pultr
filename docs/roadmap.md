@@ -42,7 +42,7 @@ Small steps. Each milestone ends with something you can run. Tick boxes as you g
 
 ## M4 — First real macOS feature: Bluetooth ⭐
 
-- [ ] `Bluetooth` port
+- [x] `Bluetooth` port
 - [ ] macOS adapter using `blueutil`
 - [ ] `bluetooth` card: status + toggle
 - [ ] Action tasks with "working…" state and timeout

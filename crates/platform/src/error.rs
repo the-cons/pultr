@@ -9,6 +9,10 @@ pub enum Error {
     /// Running a helper tool or system call failed.
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    /// The system understood, but said no: "device not paired", "Bluetooth is off"…
+    #[error("{0}")]
+    Failed(String),
 }
 
 /// `Result` with our `Error` as  the default error type.
