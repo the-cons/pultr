@@ -35,8 +35,8 @@ Small steps. Each milestone ends with something you can run. Tick boxes as you g
 - [x] Load `config.toml` (serde), XDG/`directories` path
 - [x] Cards created from config via registry (`type` → constructor)
 - [x] `pos`, `span`, auto-placement
-- [ ] Per-card `keys`, global key dispatch, conflict detection
-- [ ] `config.example.toml` in repo
+- [x] Per-card `keys`, global key dispatch, conflict detection
+- [x] `config.example.toml` in repo
 
 **Done when:** layout and keys come from your own config file.
 

@@ -45,6 +45,9 @@ impl App {
         match action {
             Action::Quit => self.running = false,
             Action::Move(dir) => self.move_focus(dir),
+            // Running is the event loop's job (it has the cards). Here: focus the card, so you see who reacted.
+            Action::Run { slot, .. } if slot < self.cards.len() => self.focused = slot,
+            Action::Run { .. } => {}
         }
     }
 
@@ -93,6 +96,16 @@ mod tests {
         let mut app = App::demo();
         app.update(Action::Quit);
         assert!(!app.is_running());
+    }
+
+    #[test]
+    fn running_an_action_focuses_its_card() {
+        let mut app = App::demo();
+        app.update(Action::Run { slot: 4, action: "toggle".to_string() });
+        assert_eq!(app.focused(), 4);
+
+        app.update(Action::Run { slot: 99, action: "toggle".to_string() }); // no such card: ignored
+        assert_eq!(app.focused(), 4);
     }
 
     #[test]
@@ -150,6 +163,7 @@ mod tests {
         app.cards.truncate(4);
         assert_eq!(moved(app, Direction::Right), 1);
     }
+
     /// `[col, row, cols, rows]` per card.
     fn app_with(rects: &[[usize; 4]], focused: usize) -> App {
         let cards = rects
