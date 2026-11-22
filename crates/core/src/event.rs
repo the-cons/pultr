@@ -8,7 +8,7 @@ use tokio::{
     time::{Interval, MissedTickBehavior, interval},
 };
 
-use crate::refresh::Update;
+use crate::refresh::{Message, Update};
 
 #[derive(Debug)]
 pub enum Event {
@@ -16,19 +16,20 @@ pub enum Event {
     Resize,
     Tick,
     Card(Update),
+    Done { slot: usize, error: Option<String> },
 }
 
 pub struct EventSource {
     terminal: EventStream,
     tick: Interval,
-    updates: mpsc::Receiver<Update>,
+    message: mpsc::Receiver<Message>,
 }
 
 impl EventSource {
-    pub fn new(tick_rate: Duration, updates: mpsc::Receiver<Update>) -> Self {
+    pub fn new(tick_rate: Duration, message: mpsc::Receiver<Message>) -> Self {
         let mut tick = interval(tick_rate);
         tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        Self { terminal: EventStream::new(), tick, updates }
+        Self { terminal: EventStream::new(), tick, message }
     }
 }
 
@@ -38,7 +39,10 @@ impl Events for EventSource {
         loop {
             tokio::select! {
                 _ = self.tick.tick() => return Ok(Event::Tick),
-                Some(update) = self.updates.recv() => return Ok(Event::Card(update)),
+                Some(message) = self.message.recv() => return Ok(match message {
+                    Message::View(update) => Event::Card(update),
+                    Message::Done { slot, error } => Event::Done { slot, error },
+                }),
                 ev = self.terminal.next() => match ev {
                     Some(Ok(ev)) => if let Some(ev) = translate(ev) { return Ok(ev) },
                     Some(Err(e)) => return Err(e.into()),

@@ -19,7 +19,10 @@ use crate::{
     keymap::Keymap,
 };
 use ratatui::{Terminal, backend::Backend};
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::sync::mpsc;
 
 /// Entry point: start the cards, set up the terminal, run the loop, always restore.
@@ -72,7 +75,9 @@ where
             }
 
             Event::Card(update) => app.apply(update),
-            Event::Resize | Event::Tick => {}
+            Event::Done { slot, error } => app.finish(slot, error, Instant::now()),
+            Event::Tick => app.expire(Instant::now()),
+            Event::Resize => {}
         }
     }
     Ok(())
@@ -143,6 +148,20 @@ mod tests {
         let mut app = App::demo();
         event_loop(&mut terminal(), &mut events, &mut app, &Keymap::default(), |_| {}).await.unwrap();
         assert_eq!(app.cards()[1].view, Some(view));
+    }
+
+    #[tokio::test]
+    async fn actions_are_busy_until_done() {
+        let config = Config::parse("[[card]]\nid = \"a\"\ntype = \"x\"\nkeys = { toggle = \"t\" }").unwrap();
+        let keymap = Keymap::new(&config.cards).unwrap();
+        let mut app = App::demo();
+
+        let done = Event::Done { slot: 0, error: Some("boom".to_string()) };
+        let mut events = Scripted::new([key('t'), key('t'), done, Event::Tick, key('q')]);
+        event_loop(&mut terminal(), &mut events, &mut app, &keymap, |_| {}).await.unwrap();
+
+        assert_eq!(app.cards()[0].busy, 1); // two started, one finished
+        assert_eq!(app.cards()[0].failure.as_ref().unwrap().message, "boom"); // a tick right away doesn't expire it
     }
 
     #[tokio::test]

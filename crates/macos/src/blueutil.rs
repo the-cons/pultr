@@ -48,7 +48,7 @@ impl Bluetooth for BlueUtil {
     }
 
     async fn set_powered(&self, on: bool) -> Result<()> {
-        self.run(&["--powered", if on { "1" } else { "0" }]).await.map(drop)
+        self.run(&["--power", if on { "1" } else { "0" }]).await.map(drop)
     }
 
     async fn devices(&self) -> Result<Vec<BtDevice>> {
@@ -185,6 +185,33 @@ mod tests {
 
         let err = bt.run(&["-c", "exit 3"]).await.unwrap_err();
         assert!(err.to_string().starts_with("blueutil failed (exit status: 3"), "{err}");
+    }
+
+    /// A fake blueutil that writes down how it was called: checks every command line we send.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn sends_the_right_commands() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = env::temp_dir().join(format!("pultr-cmd-test-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let (fake, log) = (dir.join("blueutil"), dir.join("calls.log"));
+        fs::write(&fake, format!("#!/bin/sh\necho \"$@\" >> '{}'\necho 1\n", log.display())).unwrap();
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let bt = BlueUtil { path: Some(fake) };
+        let id = DeviceId::new("aa-bb-cc-dd-ee-01");
+        bt.powered().await.unwrap();
+        bt.set_powered(true).await.unwrap();
+        bt.set_powered(false).await.unwrap();
+        bt.connect(&id).await.unwrap();
+        bt.disconnect(&id).await.unwrap();
+
+        let calls = fs::read_to_string(&log).unwrap();
+        assert_eq!(
+            calls.lines().collect::<Vec<_>>(),
+            ["--power", "--power 1", "--power 0", "--connect aa-bb-cc-dd-ee-01", "--disconnect aa-bb-cc-dd-ee-01"]
+        );
     }
 
     /// Talks to your real Bluetooth. Run on a Mac with: `just test --run-ignored only --no-capture`

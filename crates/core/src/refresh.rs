@@ -1,4 +1,5 @@
 //! One background task per card: refresh it on its interval, send the view to the UI.
+//! //! Actions run as tasks too, and report when they're done.
 //!
 //! The UI never awaits a card. It only reads whatever arrives on the channel.
 
@@ -27,15 +28,26 @@ pub struct Update {
     pub view: CardView,
 }
 
+/// What the background tasks tell the UI.
+#[derive(Debug)]
+pub enum Message {
+    View(Update),
+    /// An action on `slot` finished. `error: None` = it worked. Either way a fresh view came just before.
+    Done {
+        slot: usize,
+        error: Option<String>,
+    },
+}
+
 /// Starts one refresh task per card.
-pub fn spawn_all(cards: &[Arc<dyn Card>], tx: mpsc::Sender<Update>) -> Vec<JoinHandle<()>> {
+pub fn spawn_all(cards: &[Arc<dyn Card>], tx: mpsc::Sender<Message>) -> Vec<JoinHandle<()>> {
     cards.iter().enumerate().map(|(slot, card)| tokio::spawn(refresh_loop(slot, card.clone(), tx.clone()))).collect()
 }
 
-async fn refresh_loop(slot: usize, card: Arc<dyn Card>, tx: mpsc::Sender<Update>) {
+async fn refresh_loop(slot: usize, card: Arc<dyn Card>, tx: mpsc::Sender<Message>) {
     let Some(every) = card.refresh_interval() else {
         // Push-only card: one initial view, later updates come from elsewhere.
-        let _ = tx.send(Update { slot, view: refresh_once(card.as_ref()).await }).await;
+        let _ = tx.send(Message::View(Update { slot, view: refresh_once(card.as_ref()).await })).await;
         return;
     };
 
@@ -44,22 +56,27 @@ async fn refresh_loop(slot: usize, card: Arc<dyn Card>, tx: mpsc::Sender<Update>
     loop {
         ticker.tick().await; // the first tick completes immediately
         let view = refresh_once(card.as_ref()).await;
-        if tx.send(Update { slot, view }).await.is_err() {
+        if tx.send(Message::View(Update { slot, view })).await.is_err() {
             return; // receiver gone: the UI has shut down
         }
     }
 }
 
-/// Runs one card action in the background. Afterwards the card refreshes right away,
-/// so the result shows without waiting for the next tick. A failure becomes an error view.
-pub fn spawn_action(slot: usize, card: Arc<dyn Card>, action: String, arg: Option<String>, tx: mpsc::Sender<Update>) {
+/// Runs one card action in the background. Afterwards the card refreshes right away, so the
+/// result shows without waiting for the next tick, then `Done` says how it went.
+/// The refresh happens after a failure too: a half-done action may still have changed something,
+/// and the card keeps showing its list instead of only the error.
+pub fn spawn_action(slot: usize, card: Arc<dyn Card>, action: String, arg: Option<String>, tx: mpsc::Sender<Message>) {
     tokio::spawn(async move {
-        let view = match time::timeout(ACTION_TIMEOUT, card.run(&action, arg.as_deref())).await {
-            Ok(Ok(())) => refresh_once(card.as_ref()).await,
-            Ok(Err(e)) => CardView::error(e.to_string()),
-            Err(_) => CardView::error(format!("{action}: timed out")),
+        let error = match time::timeout(ACTION_TIMEOUT, card.run(&action, arg.as_deref())).await {
+            Ok(Ok(())) => None,
+            Ok(Err(e)) => Some(e.to_string()),
+            Err(_) => Some(format!("{action}: timed out")),
         };
-        let _ = tx.send(Update { slot, view }).await; // UI gone: nobody to tell
+        let view = refresh_once(card.as_ref()).await;
+        // UI gone: nobody to tell, so the results are ignored.
+        let _ = tx.send(Message::View(Update { slot, view })).await;
+        let _ = tx.send(Message::Done { slot, error }).await;
     });
 }
 
@@ -134,6 +151,22 @@ mod tests {
         }
     }
 
+    /// The next message, which must be a view.
+    async fn next_view(rx: &mut mpsc::Receiver<Message>) -> Update {
+        match rx.recv().await {
+            Some(Message::View(update)) => update,
+            other => panic!("expected a view, got {other:?}"),
+        }
+    }
+
+    /// The next message, which must be `Done`: (slot, error).
+    async fn next_done(rx: &mut mpsc::Receiver<Message>) -> (usize, Option<String>) {
+        match rx.recv().await {
+            Some(Message::Done { slot, error }) => (slot, error),
+            other => panic!("expected done, got {other:?}"),
+        }
+    }
+
     fn text(view: &CardView) -> &str {
         &view.lines[0].text
     }
@@ -147,7 +180,7 @@ mod tests {
         spawn_all(&[fake(Some(Duration::from_secs(1)), Behaviour::Count)], tx);
 
         for expected in ["1", "2", "3"] {
-            let update = rx.recv().await.unwrap();
+            let update = next_view(&mut rx).await;
             assert_eq!(update.slot, 0);
             assert_eq!(text(&update.view), expected);
         }
@@ -158,7 +191,7 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(8);
         spawn_all(&[fake(None, Behaviour::Count), fake(None, Behaviour::Count)], tx);
 
-        let mut slots = vec![rx.recv().await.unwrap().slot, rx.recv().await.unwrap().slot];
+        let mut slots = vec![next_view(&mut rx).await.slot, next_view(&mut rx).await.slot];
         slots.sort();
         assert_eq!(slots, vec![0, 1]);
     }
@@ -168,7 +201,7 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(8);
         let tasks = spawn_all(&[fake(None, Behaviour::Count)], tx);
 
-        assert_eq!(text(&rx.recv().await.unwrap().view), "1");
+        assert_eq!(text(&next_view(&mut rx).await.view), "1");
         assert!(rx.recv().await.is_none(), "channel should close: task is done");
         assert!(tasks[0].is_finished());
     }
@@ -178,7 +211,7 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(8);
         spawn_all(&[fake(None, Behaviour::Fail)], tx);
 
-        let view = rx.recv().await.unwrap().view;
+        let view = next_view(&mut rx).await.view;
         assert_eq!(view.state, State::Error);
         assert_eq!(text(&view), "boom");
     }
@@ -188,7 +221,7 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(8);
         spawn_all(&[fake(None, Behaviour::Hang)], tx);
 
-        let view = rx.recv().await.unwrap().view;
+        let view = next_view(&mut rx).await.view;
         assert_eq!(view.state, State::Error);
         assert_eq!(text(&view), "timed out");
     }
@@ -203,23 +236,23 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn action_then_fresh_view() {
+    async fn action_then_fresh_view_then_done() {
         let (tx, mut rx) = mpsc::channel(8);
         spawn_action(3, fake(None, Behaviour::Count), "ok".to_string(), None, tx);
 
-        let update = rx.recv().await.unwrap();
+        let update = next_view(&mut rx).await;
         assert_eq!(update.slot, 3);
         assert_eq!(text(&update.view), "1"); // refreshed right after the action
+        assert_eq!(next_done(&mut rx).await, (3, None));
     }
 
     #[tokio::test(start_paused = true)]
-    async fn failed_action_becomes_error_view() {
+    async fn failed_action_still_refreshes_and_reports_the_error() {
         let (tx, mut rx) = mpsc::channel(8);
         spawn_action(0, fake(None, Behaviour::Count), "explode".to_string(), None, tx);
 
-        let view = rx.recv().await.unwrap().view;
-        assert_eq!(view.state, State::Error);
-        assert_eq!(text(&view), "no action `explode`");
+        assert_eq!(text(&next_view(&mut rx).await.view), "1"); // the card's normal view, not an error view
+        assert_eq!(next_done(&mut rx).await, (0, Some("no action `explode`".to_string())));
     }
 
     #[tokio::test(start_paused = true)]
@@ -227,8 +260,8 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(8);
         spawn_action(0, fake(None, Behaviour::Count), "hang".to_string(), None, tx);
 
-        let view = rx.recv().await.unwrap().view;
-        assert_eq!(text(&view), "hang: timed out");
+        next_view(&mut rx).await;
+        assert_eq!(next_done(&mut rx).await, (0, Some("hang: timed out".to_string())));
     }
 
     #[tokio::test(start_paused = true)]
@@ -236,8 +269,8 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(8);
         spawn_action(0, fake(None, Behaviour::Count), "echo".to_string(), Some("AirPods Pro".to_string()), tx);
 
-        let view = rx.recv().await.unwrap().view;
-        assert_eq!(text(&view), r#"got Some("AirPods Pro")"#);
+        next_view(&mut rx).await;
+        assert_eq!(next_done(&mut rx).await.1.unwrap(), r#"got Some("AirPods Pro")"#);
     }
 
     #[tokio::test(start_paused = true)]
@@ -245,7 +278,7 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(8);
         spawn_all(&[fake(Some(Duration::ZERO), Behaviour::Count)], tx);
 
-        assert_eq!(text(&rx.recv().await.unwrap().view), "1");
-        assert_eq!(text(&rx.recv().await.unwrap().view), "2");
+        assert_eq!(text(&next_view(&mut rx).await.view), "1");
+        assert_eq!(text(&next_view(&mut rx).await.view), "2");
     }
 }
