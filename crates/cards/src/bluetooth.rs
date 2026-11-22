@@ -8,7 +8,7 @@ use pultr_core::{
     card::{ActionSpec, Card, CardView, Item, Line, State},
     config::CardConfig,
 };
-use pultr_platform::{Bluetooth, BtDevice, DeviceId};
+use pultr_platform::{Bluetooth, BtDevice, DeviceId, Error};
 
 const UNAVAILABLE: &str = "bluetooth not available";
 
@@ -67,9 +67,12 @@ impl Card for BluetoothCard {
         let Some(port) = &self.port else {
             return Ok(CardView::unavailable(UNAVAILABLE));
         };
-        let powered = port.powered().await?;
-        let devices = port.devices().await?;
-        Ok(view(powered, devices, self.devices.as_deref()))
+        match status(port.as_ref()).await {
+            Ok((powered, devices)) => Ok(view(powered, devices, self.devices.as_deref())),
+            // Missing helper tool: grey "how to fix it" instead of a red error.
+            Err(Error::Unavailable(reason)) => Ok(CardView::unavailable(reason)),
+            Err(e) => Err(e.into()),
+        }
     }
 
     async fn run(&self, action: &str, arg: Option<&str>) -> anyhow::Result<()> {
@@ -93,6 +96,10 @@ impl Card for BluetoothCard {
             _ => bail!("card `{}` has no action `{action}`", self.id),
         }
     }
+}
+
+async fn status(port: &dyn Bluetooth) -> pultr_platform::Result<(bool, Vec<BtDevice>)> {
+    Ok((port.powered().await?, port.devices().await?))
 }
 
 /// Switches the radio on first if needed, so one key is enough. Already connected: nothing to do.
@@ -358,5 +365,34 @@ mod tests {
         assert_eq!(card.refresh().await.unwrap().state, State::Unavailable);
         assert_eq!(card.run("power", None).await.unwrap_err().to_string(), UNAVAILABLE);
         assert_eq!(card.actions().len(), ACTIONS.len()); // keys still validate
+    }
+
+    /// An adapter whose helper tool is missing.
+    struct Missing;
+
+    #[async_trait]
+    impl Bluetooth for Missing {
+        async fn powered(&self) -> pultr_platform::Result<bool> {
+            Err(Error::Unavailable("brew install blueutil".to_string()))
+        }
+        async fn set_powered(&self, _on: bool) -> pultr_platform::Result<()> {
+            unreachable!()
+        }
+        async fn devices(&self) -> pultr_platform::Result<Vec<BtDevice>> {
+            unreachable!()
+        }
+        async fn connect(&self, _id: &DeviceId) -> pultr_platform::Result<()> {
+            unreachable!()
+        }
+        async fn disconnect(&self, _id: &DeviceId) -> pultr_platform::Result<()> {
+            unreachable!()
+        }
+    }
+
+    #[tokio::test]
+    async fn missing_tool_shows_how_to_fix_it() {
+        let card = BluetoothCard::new(&CardConfig::new("bt", "bluetooth"), Some(Arc::new(Missing))).unwrap();
+        let view = card.refresh().await.unwrap();
+        assert_eq!((view.state, texts(&view)), (State::Unavailable, vec!["brew install blueutil"]));
     }
 }

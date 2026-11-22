@@ -13,6 +13,10 @@ pub enum Error {
     /// The system understood, but said no: "device not paired", "Bluetooth is off"…
     #[error("{0}")]
     Failed(String),
+
+    /// This can't work on this machine as it is. The message says how to fix it: "brew install blueutil".
+    #[error("{0}")]
+    Unavailable(String),
 }
 
 /// `Result` with our `Error` as  the default error type.
@@ -28,5 +32,6 @@ mod tests {
 
         let io = std::io::Error::new(std::io::ErrorKind::NotFound, "pmset not found");
         assert_eq!(Error::from(io).to_string(), "pmset not found");
+        assert_eq!(Error::Unavailable("brew install blueutil".into()).to_string(), "brew install blueutil");
     }
 }

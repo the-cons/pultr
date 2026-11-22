@@ -24,7 +24,13 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
-/// Real adapters arrive with M4 (macOS) and M11 (Linux). Until then this machine offers nothing.
+#[cfg(target_os = "macos")]
+fn platform() -> Platform {
+    pultr_macos::platform()
+}
+
+/// The Linux adapter arrives with M11. Until then this machine offers nothing.
+#[cfg(not(target_os = "macos"))]
 fn platform() -> Platform {
     Platform::default()
 }
