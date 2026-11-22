@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use crate::{
     action::{Action, Direction, Run},
     card::{CardView, Item},
@@ -5,12 +7,25 @@ use crate::{
     refresh::Update,
 };
 
+/// How long a failed action's message stays on its card.
+pub const FAILURE_SHOWN: Duration = Duration::from_secs(6);
+
 pub struct CardSlot {
     pub title: String,
     pub placement: Placement,
     pub view: Option<CardView>,
     /// Index into the view's items. Kept while you're elsewhere, so you come back to the same row.
     pub selected: usize,
+    /// Actions on this card still running. More than one is possible: two keys pressed quickly.
+    pub busy: usize,
+    /// The last action that failed, shown until it expires or the next action starts.
+    pub failure: Option<Failure>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Failure {
+    pub message: String,
+    pub until: Instant,
 }
 
 impl CardSlot {
@@ -35,7 +50,7 @@ impl App {
     pub fn new(columns: usize, cards: impl IntoIterator<Item = (String, Placement)>) -> Self {
         let cards = cards
             .into_iter()
-            .map(|(title, placement)| CardSlot { title, placement, view: None, selected: 0 })
+            .map(|(title, placement)| CardSlot { title, placement, view: None, selected: 0, busy: 0, failure: None })
             .collect();
         Self { running: true, columns, cards, focused: 0, inside: false }
     }
@@ -43,25 +58,49 @@ impl App {
     pub fn columns(&self) -> usize {
         self.columns
     }
-
     pub fn is_running(&self) -> bool {
         self.running
     }
     pub fn cards(&self) -> &[CardSlot] {
         &self.cards
     }
-
     pub fn focused(&self) -> usize {
         self.focused
     }
-
     pub fn is_inside(&self) -> bool {
         self.inside
     }
 
     /// Changes UI state. Returns the card action to run, if there is one: running it is the
-    /// event loop's job, because the loop has the cards.
+    /// event loop's job, because the loop has the cards. Its card counts as busy until [`App::finish`].
     pub fn update(&mut self, action: Action) -> Option<Run> {
+        let run = self.decide(action)?;
+        if let Some(slot) = self.cards.get_mut(run.slot) {
+            slot.busy += 1;
+            slot.failure = None; // a new try: the old message is out of date
+        }
+        Some(run)
+    }
+
+    /// An action on `slot` finished. A failure shows on the card for [`FAILURE_SHOWN`].
+    pub fn finish(&mut self, slot: usize, error: Option<String>, now: Instant) {
+        let Some(slot) = self.cards.get_mut(slot) else { return };
+        slot.busy = slot.busy.saturating_sub(1);
+        if let Some(message) = error {
+            slot.failure = Some(Failure { message, until: now + FAILURE_SHOWN });
+        }
+    }
+
+    /// Clears failure messages that have been shown long enough. Called on every tick.
+    pub fn expire(&mut self, now: Instant) {
+        for slot in &mut self.cards {
+            if slot.failure.as_ref().is_some_and(|f| f.until <= now) {
+                slot.failure = None;
+            }
+        }
+    }
+
+    fn decide(&mut self, action: Action) -> Option<Run> {
         match action {
             Action::Quit => self.running = false,
             Action::Move(dir) => {
@@ -381,6 +420,56 @@ mod tests {
 
         app.apply(Update { slot: 0, view: rows(&["a", "b", "c"]) });
         assert_eq!(app.update(Action::Activate), toggle(0, "c"));
+    }
+
+    // ── running actions ──────────────────────────────────
+
+    fn run(slot: usize) -> Action {
+        Action::Run(Run { slot, action: "toggle".to_string(), arg: None })
+    }
+
+    #[test]
+    fn running_an_action_makes_its_card_busy_until_done() {
+        let mut app = App::demo();
+        let now = Instant::now();
+        app.update(run(2));
+        app.update(run(2)); // pressed twice
+        assert_eq!(app.cards()[2].busy, 2);
+
+        app.finish(2, None, now);
+        assert_eq!(app.cards()[2].busy, 1);
+        app.finish(2, None, now);
+        app.finish(2, None, now); // one too many: no underflow
+        assert_eq!(app.cards()[2].busy, 0);
+        assert_eq!(app.cards()[2].failure, None);
+    }
+
+    #[test]
+    fn failure_shows_for_a_while() {
+        let mut app = App::demo();
+        let now = Instant::now();
+        app.update(run(1));
+        app.finish(1, Some("Failed to connect".to_string()), now);
+        assert_eq!(app.cards()[1].failure.as_ref().map(|f| f.message.as_str()), Some("Failed to connect"));
+
+        app.expire(now + FAILURE_SHOWN - Duration::from_millis(1));
+        assert!(app.cards()[1].failure.is_some());
+        app.expire(now + FAILURE_SHOWN);
+        assert!(app.cards()[1].failure.is_none());
+    }
+
+    #[test]
+    fn next_action_clears_the_old_failure() {
+        let mut app = App::demo();
+        app.update(run(1));
+        app.finish(1, Some("boom".to_string()), Instant::now());
+        app.update(run(1));
+        assert!(app.cards()[1].failure.is_none());
+    }
+
+    #[test]
+    fn finish_for_unknown_slot_is_ignored() {
+        App::demo().finish(99, Some("boom".to_string()), Instant::now());
     }
 
     #[test]

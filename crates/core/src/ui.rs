@@ -29,6 +29,13 @@ pub fn render(app: &App, frame: &mut Frame) {
             block = block.border_type(BorderType::Thick).border_style(Style::new().fg(color));
         }
 
+        // Bottom border: what's going on with actions. Running beats an old failure.
+        if slot.busy > 0 {
+            block = block.title_bottom(Line::styled(" working… ", Style::new().fg(Color::Blue)));
+        } else if let Some(failure) = &slot.failure {
+            block = block.title_bottom(Line::styled(format!(" {} ", failure.message), Style::new().fg(Color::Red)));
+        }
+
         let body = block.inner(cell);
         frame.render_widget(block, cell);
         if let Some(view) = &slot.view {
@@ -151,9 +158,10 @@ fn grid(area: Rect, columns: usize, placements: &[Placement]) -> Vec<Rect> {
 #[cfg(test)]
 mod tests {
     use ratatui::{Terminal, backend::TestBackend};
+    use std::time::Instant;
 
     use super::*;
-    use crate::action::{Action, Direction};
+    use crate::action::{Action, Direction, Run};
     use crate::card::State;
     use crate::layout::row_major;
     use crate::refresh::Update;
@@ -276,6 +284,21 @@ mod tests {
         for _ in 0..3 {
             app.update(Action::SelectNext); // onto row 4: one more than fits, so the list scrolls by one
         }
+
+        let mut terminal = Terminal::new(TestBackend::new(90, 14)).unwrap();
+        terminal.draw(|f| render(&app, f)).unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn busy_and_failed_cards_say_so() {
+        let mut app = App::demo();
+        let run = |slot| Action::Run(Run { slot, action: "toggle".to_string(), arg: None });
+        app.update(run(0)); // still running
+        app.update(run(1));
+        app.finish(1, Some("Failed to connect \"aa-bb-cc-dd-ee-02\"".to_string()), Instant::now());
+        app.update(run(2)); // fine: nothing to show
+        app.finish(2, None, Instant::now());
 
         let mut terminal = Terminal::new(TestBackend::new(90, 14)).unwrap();
         terminal.draw(|f| render(&app, f)).unwrap();
