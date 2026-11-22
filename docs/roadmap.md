@@ -46,8 +46,8 @@ Small steps. Each milestone ends with something you can run. Tick boxes as you g
 - [x] Card lists: rows, `Enter`/`Esc` to go inside a card, actions with an argument (pulled forward from M8)
 - [x] macOS adapter using `blueutil`
 - [x] `bluetooth` card: radio + every paired device, toggle per device
-- [ ] Action tasks with "working…" state and timeout
-- [ ] Unavailable state when `blueutil` is missing
+- [x] Action tasks with "working…" state and timeout
+- [x] Unavailable state when `blueutil` is missing
 
 **Done when:** one key connects your headphones. *This is the moment the tool becomes useful.*
 
@@ -75,7 +75,7 @@ Small steps. Each milestone ends with something you can run. Tick boxes as you g
 - [ ] Action addresses `<card>.<action>`
 - [ ] `pultr run`, `pultr status --json`, `pultr list actions`
 - [ ] `/` fuzzy action palette (`nucleo`)
-- [ ] Enter → card detail view with item list
+- [x] Enter → card detail view with item list
 
 ## M9 — Shell cards, scenes, templates
 
