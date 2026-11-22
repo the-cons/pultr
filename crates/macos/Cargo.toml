@@ -1,0 +1,15 @@
+[package]
+name                    = "pultr-macos"
+description             = "macOS adapter for pultr: Bluetooth via blueutil, more to come"
+version.workspace       = true
+edition.workspace       = true
+license.workspace       = true
+authors.workspace       = true
+repository.workspace    = true
+
+[dependencies]
+pultr-platform.workspace    = true
+async-trait.workspace       = true
+serde.workspace             = true
+serde_json.workspace        = true
+tokio                       = { workspace = true, features = ["process"] }

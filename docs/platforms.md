@@ -54,7 +54,7 @@ pub fn platform() -> Platform {
 }
 ```
 
-Unavailable → `None` → cards show `unavailable` with a reason (e.g. "install blueutil").
+A missing helper tool still gives a port, but every call fails with Error::Unavailable("brew install blueutil"). The card shows that greyed out, with the fix. None means the feature doesn’t exist on this OS at all.
 
 ## Supported versions (target)
 

@@ -13,6 +13,7 @@ readme      = "README.md"
 [workspace.dependencies]
 pultr-cards     = { path = "crates/cards", version = "0.0.7" }
 pultr-core      = { path = "crates/core", version = "0.0.7" }
+pultr-macos     = { path = "crates/macos", version = "0.0.7" }
 pultr-mock      = { path = "crates/mock", version = "0.0.7" }
 pultr-platform  = { path ="crates/platform", version = "0.0.7" }
 anyhow          = "1"
@@ -22,6 +23,7 @@ futures         = "0.3"
 insta           = "1"
 ratatui         = "0.30.2"
 serde           = { version = "1.0.229", features = ["derive"] }
+serde_json      = "1.0.154"
 thiserror       = "2.0.21"
 tokio           = { version = "1.54.1", features = ["macros", "rt-multi-thread", "sync", "time"]}
 toml            = "1"
